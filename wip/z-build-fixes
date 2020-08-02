@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cp -fp ~/.rpmmacros chroot-dom0-fc32/home/user/.rpmmacros
+

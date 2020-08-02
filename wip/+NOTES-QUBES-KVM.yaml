@@ -1,0 +1,634 @@
+
+################################################################################
+WIP:
+  BREAKPOINTS:
+    qubes.vm.__init__.BaseVM.create_config_file
+
+  # Could not open '/var/lib/qubes/vm-templates/fedora-32/root-dirty.img': Permission denied
+  ISSUE:
+    - Libvirt/qemu does not have permission to write/read?
+    - Default permissions also do not allow user to write within dir.
+    - NOTE: Qubes install group is set to user, KVM install set to qubes.
+    1: Changed all group permissions from 'qubes' to 'user' in /var/lib/qubes
+       Revert
+    2: Add write permissions for group for all files and dirs in /var/lib/qubes
+       Add read permissions for group on all VM images files
+       FAIL
+    3: Change all group permissions to 'libvirt'
+       FAIL
+    4: Add libvirt, kvm, qemu to qubes group (may not need them all)
+       PASS - Keep original file permissions adding libvirt, kvm, qemu to qubes
+              group.  TODO, test to see if all need to be added.
+
+################################################################################
+RUN:
+  kvmchand:
+    - start kvmchand -d
+
+################################################################################
+TODO:
+  kvmchand:
+    - change 'kvmvchand' path from '/usr/bin/ to '/usr/sbin'
+    - systemctl service for 'kvmchand'
+      - or add to 'qubes-db-dom0.service'
+
+
+################################################################################
+CONFIG:
+  - Add 'qubes' group (101)
+  - Add BACKEND_VMM=kvm to qubes builder configuration AFTER
+    'qubes-os-master.conf' is loaded.
+      TODO: qubes-os-master.conf:
+        Change 'BACKEND_VMM=xen' to 'BACKEND_VMM ?= xen'
+        Create new 'kvm.conf'
+
+################################################################################
+ISSUES:
+  - sudo touch /etc/qubes-release
+    qubesadmin python package operates in local mode if 'qubes-release' file
+    exists, otherwise remote mode.
+
+  DISABLED:
+    - Replaced original /etc/dnf/dnf.conf with original.
+
+  systemd services:
+    # XXX:  Disable
+    #qubes-qmemman.service:
+    #  exec: /usr/bin/qmemmand
+
+    ### ISSUES ###
+    qubesd.service:
+      python: qubes.tools.qubesd
+      before: systemd-user-sessions.service
+      exec: /usr/bin/qubesd
+            from qubes.tools.qubesd import main
+
+    qubes-qrexec-policy-daemon.service:
+      after: qubesd.service
+
+    kvmchand.service:
+      after: qubesd.service
+      before: qubes-db-dom0.service
+      exec: /usr/sbin/kvmchand -d
+
+    qubes-db-dom0.service:
+      after: systemd-tmpfiles-setup.service
+      exec: /usr/sbin/qubesdb-daemon 0 dom0
+
+    qubes-core.service:
+      after: qubes-db-dom0.service libvirtd.service xenconsoled.service qubesd.service qubes-qmemman.service
+      exec: /usr/lib/qubes/startup-misc.sh
+
+    #qubes-suspend.service:
+    #  exec: /usr/lib64/pm-utils/sleep.d/52qubes-pause-vms suspend suspend
+
+    #qubes-vm@.service:
+    #  before: systemd-user-sessions.service
+    #  after: qubesd.service qubes-meminfo-writer-dom0.service
+    #  exec: /usr/bin/qvm-start --skip-if-running %i
+
+################################################################################
+NOTES:
+  - Be sure to create new branch for KVM features
+  - Add a KVM option somewhere for building
+      rpm_spec already uses '@BACKEND_VMM@'
+  - Maybe sync up with nrgaway repo
+
+################################################################################
+BUILD:
+  Build Errors:
+    - Seems like building with 32 cores breaks compiling libvirt since some
+      sections compile too fast resulting in a `FileNotFound` error.  In this
+      case copy '~/.rpmmacros' to 'chroot-dom0-fc32/home/user'.
+
+  Makefile:
+    ifeq ($(BACKEND_VMM),xen)
+    endif
+
+  Spec:
+    %define backend_vmm @BACKEND_VMM@
+    %if x%{?backend_vmm} == xxen
+    %endif
+
+################################################################################
+INSTALL:
+  qubes-artwork
+     replacing  desktop-backgrounds-compat.noarch 32.0.0-3.fc32
+     replacing  fedora-logos.x86_64 30.0.2-4.fc32
+  qubes-core-dom0-linux-kernel-install
+     replacing  os-prober.x86_64 1.77-4.fc32
+  qubes-menus
+     replacing  redhat-menus.noarch 12.0.2-17.fc32
+
+  Running scriptlet: python3-docutils-0.15.2-4.fc32.noarch
+  Running scriptlet: xen-libs-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-utils-libs-4.1.10-1.fc32.x86_64
+  Running scriptlet: xen-hypervisor-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: xen-runtime-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-core-qrexec-dom0-4.1.8-1.fc32.x86_64                                                                                        51/88
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              52/88
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              52/88
+  Running scriptlet: qubes-core-dom0-linux-4.1.6-1.fc32.x86_64                                                                                         53/88
+  Running scriptlet: qubes-core-dom0-linux-4.1.6-1.fc32.x86_64                                                                                         53/88
+  Running scriptlet: qubes-gui-daemon-4.1.7-1.fc32.x86_64                                                                                              56/88
+  Running scriptlet: qubes-gui-daemon-4.1.7-1.fc32.x86_64                                                                                              56/88
+  Running scriptlet: qubes-manager-4.1.10-1.fc32.noarch                                                                                                57/88
+  Running scriptlet: qubes-desktop-linux-common-4.1.3-1.fc32.noarch                                                                                    58/88
+  Running scriptlet: salt-minion-3001rc1-2.fc32.noarch                                                                                                 61/88
+  Running scriptlet: qubes-mgmt-salt-base-topd-4.1.1-1.fc32.noarch                                                                                     63/88
+  Running scriptlet: qubes-mgmt-salt-base-config-4.1.0-1.fc32.noarch                                                                                   64/88
+  Running scriptlet: qubes-mgmt-salt-base-4.1.2-1.fc32.noarch                                                                                          67/88
+  Running scriptlet: qubes-mgmt-salt-dom0-qvm-4.1.3-1.fc32.noarch                                                                                      68/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         69/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         69/88
+  Running scriptlet: qubes-mgmt-salt-dom0-update-4.1.3-1.fc32.noarch                                                                                   71/88
+  Running scriptlet: qubes-desktop-linux-manager-4.1.5-1.fc32.noarch                                                                                   72/88
+  Upgrading        : xen-2001:4.13.1-4.fc32.x86_64                                                                                                     75/88
+  Obsoleting       : redhat-menus-12.0.2-17.fc32.noarch                                                                                                80/88
+  Obsoleting       : fedora-logos-30.0.2-4.fc32.x86_64                                                                                                 81/88
+  Obsoleting       : desktop-backgrounds-compat-32.0.0-3.fc32.noarch                                                                                   82/88
+
+  warning: file /boot/xen.gz: remove failed: No such file or directory
+  warning: file /boot/xen-4.13.gz: remove failed: No such file or directory
+
+  Running scriptlet: xen-4.13.1-4.fc32.x86_64                                                                                                          83/88
+  Running scriptlet: xen-runtime-4.13.1-4.fc32.x86_64                                                                                                  84/88
+  Running scriptlet: xen-hypervisor-4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              88/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         88/88
+  Running scriptlet: qubes-desktop-linux-manager-4.1.5-1.fc32.noarch                                                                                   88/88
+  Running scriptlet: os-prober-1.77-4.fc32.x86_64
+
+  Errors during downloading metadata for repository 'qubes-dom0-cached':
+    - Curl error (37): Couldn't read a file:// file for file:///var/lib/qubes/updates/repodata/repomd.xml [Couldn't open file /var/lib/qubes/updates/repodata/repomd.xml]
+  Error: Failed to download metadata for repo 'qubes-dom0-cached': Cannot download repomd.xml: Cannot download repodata/repomd.xml: All mirrors were tried
+    Ignoring repositories: qubes-dom0-cached
+
+
+################################################################################
+COMPONENTS:
+  #=============================================================================
+  # HOST
+  #=============================================================================
+  HOST:
+    #---------------------------------------------------------------------------
+    core-libvirt:
+      DOM0:
+        requires: No qubes depends
+        - spec disables some features kvm would want
+        #provides:
+        #  libvirt-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-admin-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-bash-completion-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-client-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-config-nwfilter-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-interface-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-libxl-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-nodedev-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-nwfilter-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-secret-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-core-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-disk-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-gluster-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-iscsi-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-logical-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-mpath-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-scsi-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-zfs-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-xen-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-devel-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-docs-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-libs-6.4.0-1.fc32.x86_64.rpm
+        #  python3-libvirt-6.4.0-1.fc32.x86_64.rpm
+
+          #### MISSING KVM PACKAGES ############################################
+          libvirt-daemon-config-network
+          libvirt-daemon-driver-network
+          libvirt-daemon-driver-qemu
+          libvirt-daemon-driver-storage-iscsi-direct
+          libvirt-daemon-driver-storage-rbd
+          libvirt-daemon-driver-storage-sheepdog
+          libvirt-daemon-kvm
+          libvirt-gconfig
+          libvirt-glib
+          libvirt-gobject
+
+    #---------------------------------------------------------------------------
+    #core-vchan-xen:
+    #  DOM0:
+    #    qubes-libvchan-xen:
+    #    qubes-libvchan-xen-devel:
+    #      #provides:
+    #      #  qubes-core-vm-devel
+    #      #  qubes-core-libs-devel
+    #      #  qubes-libvchan-devel
+    #  #VM:
+    #  #  qubes-libvchan-xen:
+    #  #  qubes-libvchan-xen-devel:
+    core-vchan-libkvmchan:
+      DOM0:
+      VM:
+    core-vchan-kvm:
+      NOTES:
+        - Remove u2mfn if not required
+      DOM0:
+        qubes-libvchan-xen:
+        qubes-libvchan-xen-devel:
+          #provides:
+          #  qubes-core-vm-devel
+          #  qubes-core-libs-devel
+          #  qubes-libvchan-devel
+      #VM:
+      #  qubes-libvchan-xen:
+      #  qubes-libvchan-xen-devel:
+
+    #---------------------------------------------------------------------------
+    core-qubesdb:
+      DOM0:
+        qubes-db-dom0:
+          #requires: qubes-db
+        qubes-db:
+          requires: qubes-libvchan-@BACKEND_VMM@ (xen)
+        qubes-db-libs:
+        qubes-db-devel:
+          #requires: qubes-db-libs
+        python3-qubesdb:
+          #requires: qubes-db-libs
+      #VM:
+      #  qubes-db-vm:
+      #  qubes-db:
+      #  qubes-db-libs:
+      #  qubes-db-devel:
+      #  python3-qubesdb:
+
+    #---------------------------------------------------------------------------
+    core-qrexec:
+      COMMON:
+        qubes-core-qrexec:
+          #requires:
+          #  python3
+          #  python3-gbulb
+        qubes-core-qrexec-libs:
+        qubes-core-qrexec-devel:
+      DOM0:
+        qubes-core-qrexec-dom0:
+          requires:
+            qubes-core-dom0
+            #qubes-core-qrexec
+            #python3
+            #python3-inotify
+      #VM:
+      #  qubes-core-qrexec-vm:
+      #    #requires:
+      #    #  qubes-core-qrexec
+      #    #  python3
+
+    #---------------------------------------------------------------------------
+    linux-utils:
+      NOTES:
+        DISABLED: debian and arch builds until fedora build working!
+      - dracut
+      - grub
+      - imgconverter
+      - initramfs-tools
+      - kernel-modules
+      - qmemman
+      - qrexec-lib
+      - udev
+      DOM0:
+        qubes-utils:
+          #requires:
+          #  qubes-utils-libs
+          #  python3-qubesimgconverter
+          #  udev
+          #  ImageMagick
+        qubes-utils-libs:
+        qubes-utils-devel:
+        python3-qubesimgconverter:
+          #requires:
+          #  python3
+          #  python3-cairo
+          #  python3-pillow
+          #  python3-numpy
+        qubes-kernel-vm-support:
+          #requires: dracut
+      #VM:
+      #  qubes-utils:
+      #  qubes-utils-libs:
+      #  qubes-utils-devel:
+      #  python3-qubesimgconverter:
+      #  qubes-kernel-vm-support:
+
+    #---------------------------------------------------------------------------
+    python-cffi:      # Debian - Foreign Function Interface for Python 3 calling C code
+    python-xcffib:    # VM-DEB: This package is a Python binding for XCB
+    python-quamash:   # DOM0+VM: PEP 3156 event-loop (asyncio) api using the Qt Event-Loop
+    python-qasync:    # DOM0+VM: Implementation of the PEP 3156 Event-Loop with Qt
+    python-objgraph:  # DOM0+VM: Draws Python object reference graphs with graphviz
+    python-hid:       # Debian - Human interface API
+
+    #---------------------------------------------------------------------------
+    core-admin:
+      conf:
+        - qmemman.conf
+        - systemd
+        - qubes-rpc-policy
+        - relaxng grammer
+        - libvirt templates
+      - docs
+      - qubes python api
+      - qubes-rpc
+      DOM0:
+        qubes-core-dom0:
+          requires:
+            qubes-core-dom0-linux
+            python3-qubesdb
+            # policy (daemon) using changed qubesd socket protocol
+            qubes-core-qrexec-dom0
+            qubes-db-dom0
+            %if x%{?backend_vmm} == xxen:
+              xen-runtime
+              xen-hvm
+              xen-hvm-stubdom-linux
+              libvirt-daemon-xen
+            #systemd-units
+            #python3
+            #python3-docutils
+            #python3-jinja2
+            #python3-lxml
+            #python3-setuptools
+            #python3-PyYAML
+            #python3-xen
+            #libvirt-python3
+            #pciutils
+            #cronie
+            #scrypt
+            ## for qubes-hcl-report
+            #dmidecode
+            ## Required for qvm-console* tools
+            #socat
+          #provides:
+          #  qubes-core-dom0-doc
+          #  preupgrade
+      #VM: None
+
+    #---------------------------------------------------------------------------
+    core-admin-client:
+      - qubesadmin
+      DOM0:
+        qubes-core-admin-client:
+          #requires:
+          #  python3-qubesadmin
+          #  python3-yaml
+        python3-qubesadmin:
+          #requires:
+          #  python3-daemon
+          #  python3-docutils
+          #  python3-lxml
+          #  python3-xcffib
+      #VM:
+      #  qubes-core-admin-client:
+      #  python3-qubesadmin:
+
+    #---------------------------------------------------------------------------
+    #core-admin-addon-whonix:
+    #  - qubeswhonix
+    #  - qubes-rpc-policy
+    #  DOM0:
+    #  VM: None
+
+    #---------------------------------------------------------------------------
+    core-admin-linux:
+      - Appmenus
+      - Dom0 updates
+      - Qrexec services
+      - pm-utils
+      - Dracut module
+      - Vaio fixes
+      - Misc config
+      DOM0:
+        qubes-core-dom0-linux:
+          requires:
+            qubes-core-dom0
+            qubes-core-qrexec-dom0
+            qubes-core-admin-client
+            qubes-utils
+            qubes-utils-libs
+            python3-qubesadmin
+            #qubes-core-dom0-linux-kernel-install
+            #xdotool
+            #createrepo_c
+        qubes-core-dom0-linux-kernel-install:
+        qubes-core-dom0-vaio-fixes:
+      #VM: None
+
+    #---------------------------------------------------------------------------
+    DOM0+VM: artwork:
+    DOM0+VM: manager:
+
+  #=============================================================================
+  # TEMPLATE
+  #=============================================================================
+  TEMPLATE:
+    #---------------------------------------------------------------------------
+    core-agent-linux:
+      agents:
+        - qubes-core-agent-thunar
+        - passwordless-root
+        - networking
+        - network-manager
+        - firewall
+      conf:
+        - app-menu
+        - autostart
+        - boot
+        - fstab
+        - systemd config
+        - sysvinit config
+        - dom0-updates
+        - packages managers
+        - dnf-plugins
+      - qubes-rpc
+      - docs
+      #DOM0: None
+      VM:
+        qubes-core-agent:
+          requires:
+            qubes-utils
+            qubes-utils-libs
+            # for qvm-feature-request
+            python3-qubesdb
+            qubes-core-qrexec-vm
+            qubes-libvchan
+            qubes-db-vm
+            #python3-dnf-plugins-qubes-hooks
+            #xdg-utils
+            #initscripts
+            #gawk
+            #sed
+            #util-linux
+            #e2fsprogs
+            #hostname
+            ## for Qubes Manager VM updater
+            #xterm
+            ## for qubes-desktop-run
+            #python3-gobject-base
+            #python3-dbus
+            ## for qubes-session-autostart, xdg-icon
+            #python3-pyxdg
+            #python3-daemon
+            #ImageMagick
+            #librsvg2-tools
+            #zenity
+            #dconf
+            #python3-setuptools
+            ## for qubes.ResizeDisk
+            #parted
+          #provides:
+          #  qubes-core-vm
+          #  qubes-core-vm-doc
+        python2-dnf-plugins-qubes-hooks:
+        python3-dnf-plugins-qubes-hooks:
+        qubes-core-agent-nautilus:
+          #requires:
+          #  qubes-core-agent
+          #  nautilus-python
+        qubes-core-agent-dom0-updates:
+          #requires:
+          #  qubes-core-agent
+          #  fakeroot
+          #  tar
+        qubes-core-agent-networking:
+          #requires:
+          #  qubes-core-agent
+          #  ethtool
+          #  iptables
+          #  net-tools
+          #  iproute
+          #  nftables
+          #  socat
+          #  tinyproxy
+        qubes-core-agent-network-manager:
+          #requires:
+          #  qubes-core-agent-networking
+          #  NetworkManager
+          #  glib2
+          #  polkit
+        qubes-core-agent-passwordless-root:
+        qubes-core-agent-thunar:
+          #requires: Thunar
+        qubes-core-agent-sysvinit:
+          requires:
+            qubes-core-qrexec-vm
+            #qubes-core-agent
+            #qubes-core-agent-networking
+            #upstart
+          #provides:
+          #  qubes-core-agent-init-scripts
+          #  qubes-core-vm-sysvinit
+        qubes-core-agent-systemd:
+          #requires:
+          #  qubes-core-agent
+          #  systemd
+          #  systemd-units
+          #provides:
+          #  qubes-core-vm-systemd
+          #  qubes-core-agent-init-scripts
+
+    DOM0: app-yubikey
+    DOM0+VM: app-linux-split-gpg
+    VM: app-thunderbird
+    DOM0+VM: app-linux-pdf-converter
+    DOM0+VM: app-linux-img-converter
+    DOM0+VM: app-linux-input-proxy
+    DOM0+VM: app-linux-usb-proxy
+    VM: app-linux-snapd-helper
+    VM: app-shutdown-idle
+    DOM0+VM: python-u2flib-host # Yubikey - Python based U2F host library
+    DOM0+VM: app-u2f
+    linux-template-builder
+
+  #=============================================================================
+  # PYTHON
+  #=============================================================================
+  PYTHON:
+    # ==========================================================================
+    python-cffi      # Debian - Foreign Function Interface for Python 3 calling C code
+    VM-DEB: python-xcffib    # Debian - This package is a Python binding for XCB
+    DOM0+VM: python-quamash   # PEP 3156 event-loop (asyncio) api using the Qt Event-Loop
+    DOM0+VM: python-qasync    # Implementation of the PEP 3156 Event-Loop with Qt
+    DOM0+VM: python-objgraph  # Draws Python object reference graphs with graphviz
+    python-hid       # Debian - Human interface API
+
+  #=============================================================================
+  # DOM0: SALT MANAGEMENT
+  #=============================================================================
+  MGMT:
+    DOM0+VM: mgmt-salt
+    DOM0+VM: mgmt-salt-base
+    DOM0+VM: mgmt-salt-base-topd
+    DOM0+VM: mgmt-salt-base-config
+    DOM0: mgmt-salt-dom0-qvm
+    DOM0: mgmt-salt-dom0-virtual-machines
+    DOM0: mgmt-salt-dom0-update
+
+  #=============================================================================
+  # DOM0: XEN
+  #=============================================================================
+  DOM0:
+    DOM0: vmm-xen
+    DOM0: intel-microcode
+    DOM0: linux-firmware
+    DOM0: linux-kernel
+    DOM0: grub2
+    DOM0: grub2-theme
+    DOM0+VM: gui-common
+    DOM0+VM: gui-daemon
+    DOM0+VM: gui-agent-linux  # pulseaudio, gui
+    gui-agent-xen-hvm-stubdom
+    DOM0: seabios
+    DOM0: vmm-xen-stubdom-legacy
+    DOM0: vmm-xen-stubdom-linux
+    DOM0: infrastructure
+    DOM0+VM: meta-packages
+    DOM0+VM: desktop-linux-common
+    DOM0+VM: desktop-linux-kde
+    DOM0+VM: desktop-linux-xfce4
+    DOM0+VM: desktop-linux-xfce4-xfwm4
+    DOM0+VM: desktop-linux-i3
+    DOM0+VM: desktop-linux-i3-settings-qubes
+    DOM0+VM: desktop-linux-awesome
+    DOM0: desktop-linux-manager
+    VM: grubby-dummy
+    DOM0: linux-pvgrub2
+    DOM0+VM: linux-gbulb
+    DOM0+VM: linux-scrypt
+
+  #=============================================================================
+  # ISO
+  #=============================================================================
+  ISO:
+    installer-qubes-os
+    qubes-release
+    pykickstart
+    blivet
+    lorax
+    lorax-templates
+    pungi
+    anaconda
+    anaconda-addon
+    linux-yum
+    linux-deb
+    tpm-extra
+    trousers-changer
+    antievilmaid
+
+  #=============================================================================
+  # BUILD
+  #=============================================================================
+  BUILD:
+    builder
+    builder-debian
+    builder-rpm
