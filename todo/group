@@ -1,0 +1,5 @@
+kvm:x:36:qemu
+qubes:x:101:user,libvirt,kvm,qemu
+qemu:x:107:
+libvirt:x:983:user
+user:x:1000:

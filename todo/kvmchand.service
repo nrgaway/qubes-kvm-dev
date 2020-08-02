@@ -1,0 +1,16 @@
+[Unit]
+Description=KVM vchan daemon
+Before=qubes-db-dom0.service
+After=qubesd.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/kvmchand
+Restart=always
+RestartSec=0
+KillMode=process
+StandardOutput=syslog
+
+[Install]
+WantedBy=multi-user.target
