@@ -1,0 +1,28 @@
+#!/bin/sh
+# vim: ft=sh ts=4 sw=4 expandtab:
+
+source /share/bin/packages.sh
+
+#DEBUG=true
+#DRYRUN=true
+
+qubes_db=(
+    ##qubes-db-4.1.7-1.fc32.x86_64.rpm
+    ##qubes-db-vm-4.1.7-1.fc32.x86_64.rpm
+    ##qubes-db-libs-4.1.7-1.fc32.x86_64.rpm
+    qubes-db
+    qubes-db-libs
+    qubes-db-vm
+)
+
+if (( INSTALL_PACKAGES )); then
+    install_packages "${qubes_db[@]}"
+
+    sudo cp -f "$CONFDIR"/lib_systemd_system/qubes-db.service /lib/systemd/system
+    sudo systemctl daemon-reload
+    sudo systemctl enable qubes-db.service
+
+else
+    add_packages "${qubes_db[@]}"
+fi
+
