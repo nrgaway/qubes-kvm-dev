@@ -1,0 +1,32 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+declare -ir false=0 true=1
+
+################################################################################
+# XXX:
+#   Temp cleanup to run during development to ensure all mounts are un-mounted
+#   and loop devices detached.
+#
+clean=true
+#
+################################################################################
+
+DEBUG=false
+DRYRUN=false
+
+SOURCE_ROOT_IMG='/var/lib/libvirt/images/fc32-I440-UEFI.img'
+##SOURCE_PRIVATE_IMG=/var/lib/qubes/vm-templates/fc32/private.img
+TEMPLATE_NAME='fc32'
+
+export SCRIPTSDIR="$(readlink -m template_kvm)"
+export TEMPLATE_ROOT_WITH_PARTITIONS=1
+
+#### XXX:  TEMP:
+if (( clean )); then
+    ./tmp_mount_cleanup "$TEMPLATE_NAME"
+fi
+########
+
+sudo -E ./prepare_image "${TEMPLATE_NAME}" "$SOURCE_ROOT_IMG" "$SOURCE_PRIVATE_IMG"
+

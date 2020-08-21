@@ -1,0 +1,186 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+#
+# mount image [mount|umount] [IMAGE] [PRIVATE_IMG]
+#
+
+source ./lib/lib_utils.sh
+source ./lib/lib_functions.sh
+source ./lib/lib_cleaner.sh
+source ./lib/disk_partition.sh
+source ./lib/disk_uuid.sh
+source ./lib/umount_kill.sh >/dev/null; export umount_kill
+
+if [ $UID != 0 ]; then
+    error "$(quote "$0") should be run as root user."
+    exit 1
+fi
+
+set -e
+
+help () {
+    local command="$1"
+    output ""
+    case "$command" in
+        img)
+            error "No root image provided or found within local directory!"
+            ;;
+        private_img)
+            warn "No private image provided or found within local directory!"
+            return 0
+            ;;
+    esac
+    outputc "blue" "usage: mount_image [mount|umount] [IMAGE] [PRIVATE_IMG]"
+    exit 1
+}
+
+find_image () {
+    local type="${1:-root}"
+
+    readarray -t images <<<"$(ls -1 *.img)"
+    for filename in "${images[@]}"; do
+        if echo "$filename" | grep -Pqo '[-]private[.]img'; then
+            if [ "$type" == "private" ]; then
+                echo "$(readlink -m "$filename")"
+                return
+            fi
+        else
+            if [ "$type" == "root" ]; then
+                echo "$(readlink -m "$filename")"
+                return
+            fi
+        fi
+    done
+    return 1
+}
+
+
+# ==============================================================================
+# Configurations
+# ==============================================================================
+MODE="$1"
+IMG="$(readlink -m "$2")" || true
+PRIVATE_IMG="$(readlink -m "$3")" || true
+
+# Auto load root and private images if available with current directory
+if [ -z "$IMG" ]; then
+    info "Auto determine root and private image paths"
+    IMG="$(readlink -m "$(find_image root)")" || help img
+    PRIVATE_IMG="$(readlink -m "$(find_image private)")" || help private_img
+fi
+
+# Auto determine mount/umount mode based on loop device status
+if [ -z "$MODE" ]; then
+    info "Auto determine mount status"
+    get_image_loop "$IMG" > /dev/null 2>&1 && MODE=umount || MODE=mount
+fi
+
+echo "         MODE: $MODE"
+echo "        IMAGE: $(quote "$IMG")"
+echo "PRIVATE_IMAGE: $(quote "$PRIVATE_IMG")"
+
+export ROOTDIR="$(readlink -m .)"
+export LC_ALL=POSIX
+
+# Make sure INSTALLDIR and PRIVATEDIR exists
+export INSTALLDIR="$(readlink -m mnt)"
+mkdir -p "${INSTALLDIR}"
+
+
+# ==============================================================================
+# Error and cleanup functions
+# ==============================================================================
+_error () {
+    errval=$?
+    local caller="$(caller)"
+    local lineno="${caller%% *}"
+
+    output ""
+    outputc "bold" "--- ERROR -----------------------------------------------------------"
+    error "ERROR: $(readlink -m "${0}"):" >&2
+    awk 'NR>L-4 && NR<L+4 { printf "%-5d%3s%s\n",NR,(NR==L?">>>":""),$0 }' L=$lineno $0
+
+    if [ ${#@} -gt 0 ]; then
+        output "${@}"
+    fi
+
+    trap - ERR
+    mount_image_cleanup $errval
+}
+trap _error ERR
+##trap _exit EXIT
+##trap _exit HUP INT QUIT TERM
+
+mount_image_cleanup () {
+    #errval=$?
+    errval=${1:-$?}
+    trap - EXIT
+    trap
+
+    if [ ${#@} -gt 0 ]; then
+        echo "${@}"
+    fi
+
+    output ""
+    umount_detach_all "$IMG" "$PRIVATE_IMG"
+    exit $errval
+}
+CLEANERS+=(mount_image_cleanup)
+
+
+# ==============================================================================
+# Mount image partitions
+# ==============================================================================
+if [ "$MODE" == "mount" ]; then
+    echo "-> Mounting image partitions..."
+
+    export SOURCEDIR="$INSTALLDIR"  # TEMP:
+    attach_image_loopdev "$IMG"
+
+    # Mount image partitions
+    DEV="$(get_image_loop "$IMG")" ##&& {
+    info "Mounting root filesystem..."
+    mount_partition "root" "$DEV" "${INSTALLDIR}/root"
+
+    info "Mounting boot filesystem..."
+    mount_partition "boot" "$DEV" "${INSTALLDIR}/root/boot" || true
+
+    info "Mounting efi filesystem..."
+    mount_partition "efi" "$DEV" "${INSTALLDIR}/root/boot/efi" || {
+        info "Creating efi filesystem..."
+        efi_dev="$(get_partition_by_type $DEV "efi")"
+        echo "     DEV: $DEV"
+        echo " EFI_DEV: $efi_dev"
+        /sbin/mkfs.vfat -F 32 -i "$(get_uuid "$dev" efi UUID)" "${efi_dev}" || true
+        mount_partition "efi" "$DEV" "${INSTALLDIR}/root/boot/efi" || true
+    }
+    #mount_partition "bios" "$DEV" "${INSTALLDIR}/bios" || true
+    #mount_partition "swap" "$DEV" "${INSTALLDIR}/swap" || true
+
+    attach_image_loopdev "$PRIVATE_IMG" >/dev/null && {
+        info "Mounting private filesystem..."
+        PRIVATE_DEV="$(get_image_loop "$PRIVATE_IMG")" && {
+            echo "PRIVATE_DEV: $PRIVATE_DEV"
+            mount_partition "private" "$PRIVATE_DEV" "${INSTALLDIR}/private" || true
+        }
+    } || true
+
+    # --- INTERNAL MOUNTS ------------------------------------------------------
+    mount -t proc proc "${INSTALLDIR}/root/proc"
+    chroot "${INSTALLDIR}/root" mount -t sysfs sys /sys
+    chroot "${INSTALLDIR}/root" mount -t devtmpfs none /dev
+    ##chroot "${INSTALLDIR}/root" grub2-mkconfig -o /etc/grub2.cfg || RETCODE=1
+    ##chroot "${INSTALLDIR}/root" grub2-mkconfig -o /etc/grub2-efi.cfg || RETCODE=1
+    ##chroot "${INSTALLDIR}/root" umount /dev /sys /proc
+fi
+
+
+# ==============================================================================
+# Umount source image partitions
+# ==============================================================================
+if [ "$MODE" == "umount" ]; then
+    cleaner
+    ##mount_image_cleanup
+fi
+

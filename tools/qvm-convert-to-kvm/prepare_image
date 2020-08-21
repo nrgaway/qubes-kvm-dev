@@ -1,0 +1,285 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+source ./lib/lib_utils.sh
+
+if ! is_declared VERBOSE; then
+    VERBOSE=1
+    #VERBOSE=0
+    export VERBOSE
+fi
+DEBUG=${DEBUG:-0}
+export SYSTEMD_NSPAWN_ENABLE=1
+
+source ./lib/lib_functions.sh
+source ./lib/lib_cleaner.sh
+source ./lib/disk_partition.sh
+source ./lib/disk_uuid.sh
+source ./lib/umount_kill.sh >/dev/null; export umount_kill
+
+if [ $UID != 0 ]; then
+    error "$(quote "$0") should be run as root user."
+    exit 1
+fi
+
+if [ "${VERBOSE}" -ge 2 -o "${DEBUG}" == "1" ]; then
+    set -x
+fi
+
+set -e
+##set -Eeuo pipefail
+
+
+# ==============================================================================
+# Configuration
+# ==============================================================================
+export TEMPLATE_NAME="${1}"
+export SOURCE_IMG="$(readlink -m "$2")"
+export SOURCE_PRIVATE_IMG="$(readlink -m "$3")" || true
+
+export TARGET_IMG="$(readlink -m "${TEMPLATE_NAME}".img)"
+export TARGET_PRIVATE_IMG="$(readlink -m "${TEMPLATE_NAME}"-private.img)"
+export ROOTDIR="$(readlink -m .)"
+export LC_ALL=POSIX
+RETCODE=0
+
+output ""
+info "Configuration"
+format_kwargs \
+    "        SOURCE_IMAGE: $(quote "$SOURCE_IMG")" \
+    "SOURCE PRIVATE_IMAGE: $(quote "$SOURCE_PRIVATE_IMG")" \
+    "        TARGET_IMAGE: $(quote "$TARGET_IMG")" \
+    "TARGET_PRIVATE_IMAGE: $(quote "$TARGET_PRIVATE_IMG")" \
+    "             ROOTDIR: $(quote "$ROOTDIR")"
+
+if ! [ $# -eq 2 ] && ! [ $# -eq 3 ]; then
+    echo "usage ${0} <img_file_name> <source_root_image> [<source_private_image>]"
+    exit
+fi
+
+# ==============================================================================
+# Error and cleanup functions
+# ==============================================================================
+_error () {
+    errval=$?
+    local caller="$(caller)"
+    local lineno="${caller%% *}"
+
+    output ""
+    outputc "bold" "--- ERROR -----------------------------------------------------------"
+    output "caller: $caller"
+    output "lineno: $lineno"
+    output "errval: $errval"
+
+    error "ERROR: $(readlink -m "${0}"):" >&2
+    awk 'NR>L-4 && NR<L+4 { printf "%-5d%3s%s\n",NR,(NR==L?">>>":""),$0 }' L=$lineno $0
+
+    if [ ${#@} -gt 0 ]; then
+        output "${@}"
+    fi
+
+    trap - ERR
+    exit $errval
+}
+_exit () {
+    #errval=$?
+    errval=${1:-$?}
+    output ""
+    outputc "bold" "--- EXIT ------------------------------------------------------------"
+    output "errval: $errval"
+    trap - EXIT
+    trap
+
+    if [ ${#@} -gt 0 ]; then
+        echo "${@}"
+    fi
+
+    cleaner
+    #exit $errval
+}
+export _error _exit
+trap _error ERR
+trap _exit EXIT
+trap _exit HUP INT QUIT TERM
+
+prepare_cleanup () {
+##    #echo "-> Cleaning up..."
+##    #"${SCRIPTSDIR}/09_cleanup.sh"
+
+##    info "Unmounting prepared_image..."
+##    umount_kill "$(readlink -m ${INSTALLDIR})" || true
+##    umount_kill "$(readlink -m ${PRIVATEDIR})" || true
+##    #/sbin/losetup -d ${IMG_LOOP}
+##    #/sbin/losetup -d ${PRIVATE_IMG_LOOP}
+##    output ""
+    umount_detach_all \
+        "$SOURCE_IMG" "$SOURCE_PRIVATE_IMG" "$TARGET_IMG" "$TARGET_PRIVATE_IMG"
+}
+CLEANERS+=(prepare_cleanup)
+
+# ==============================================================================
+# Make sure INSTALLDIR and PRIVATEDIR exists
+# ==============================================================================
+export INSTALLDIR="$(readlink -m mnt/root)"
+export PRIVATEDIR="$(readlink -m mnt/private)"
+mkdir -p "${INSTALLDIR}"
+mkdir -p "${PRIVATEDIR}"
+
+# ==============================================================================
+# Mount source image partitions
+# ==============================================================================
+export SOURCEDIR="$(readlink -m "${ROOTDIR}"/mnt-source)"
+attach_image_loopdev "$SOURCE_IMG"
+attach_image_loopdev "$SOURCE_PRIVATE_IMG" >/dev/null || true
+
+# Mount source image partitions
+SOURCE_ROOT_DEV="$(get_image_loop "$SOURCE_IMG")" && {
+    info "Mounting source root filesystem..."
+    mount_partition "root" "$SOURCE_ROOT_DEV" "${SOURCEDIR}/root"
+
+    info "Mounting source boot filesystem..."
+    mount_partition "boot" "$SOURCE_ROOT_DEV" "${SOURCEDIR}/boot" || true
+
+    info "Mounting source efi filesystem..."
+    mount_partition "efi" "$SOURCE_ROOT_DEV" "${SOURCEDIR}/efi" || true
+    #mount_partition "bios" "$SOURCE_ROOT_DEV" "${SOURCEDIR}/bios" || true
+    #mount_partition "swap" "$SOURCE_ROOT_DEV" "${SOURCEDIR}/swap" || true
+}
+
+SOURCE_PRIVATE_DEV="$(get_image_loop "$SOURCE_PRIVATE_IMG")" && {
+    info "Mounting source private filesystem..."
+    mount_partition "private" "$SOURCE_PRIVATE_DEV" "${SOURCEDIR}/private" || true
+}
+
+#echo ""
+#echo "      PTUUID: $(get_uuid ${SOURCE_ROOT_DEV} ptuuid PTUUID)"        # PASS
+#echo "    UUID_EFI: $(get_uuid ${SOURCE_ROOT_DEV} efi PART_ENTRY_UUID)"  # PASS
+#echo "   UUID_BOOT: $(get_uuid ${SOURCE_ROOT_DEV} boot PART_ENTRY_UUID)"
+#echo "   UUID_ROOT: $(get_uuid ${SOURCE_ROOT_DEV} root PART_ENTRY_UUID)"
+#echo "UUID_PRIVATE: $(get_uuid ${SOURCE_ROOT_DEV} private UUID)"
+#
+#      PTUUID: 6ed595df-14e6-4477-a2ad-e5a16fdb76c1
+#    UUID_EFI: 84529990-2598-497f-893d-0aec77cb8281
+#   UUID_BOOT: 26ea0a01-4967-4f32-b757-4078ed44d9f4
+#   UUID_ROOT: 3c39a6e8-5070-4333-86e8-0df826a73f85
+#UUID_PRIVATE: 1ae8b5b3-9f37-460d-bea0-0908b3c88541
+
+# ==============================================================================
+# Mount target template image
+# ==============================================================================
+
+# --- ATTACH TARGET IMAGE LOOP DEVICES -----------------------------------------
+PART_EFI=true
+PART_BOOT=true
+PART_ROOT=true
+
+attach_image_loopdev "$TARGET_IMG" || {
+    # Target image exists but was unable to attack to loop device
+    if [ -e "$TARGET_IMG" ]; then exit 1; fi
+
+    info "Initializing empty image..."
+    # Set TEMPLATE_ROOT_SIZE and TEMPLATE_PRIVATE_SIZE
+    set_template_image_sizes "10G" "5G" "2G" "5G"
+    truncate -s "$TEMPLATE_ROOT_SIZE" "${TARGET_IMG}" || exit 1
+
+    # asci to hex uuids
+    if [ "0$TEMPLATE_ROOT_WITH_PARTITIONS" -eq 1 ]; then
+        info "Creating partition table"
+
+        # --- PARTITION INFO ---------------------------------------------------
+        partition_info=(
+            "label: gpt"
+            "label-id: $(get_uuid ${SOURCE_ROOT_DEV} ptuuid PTUUID)"
+        )
+        if (( PART_EFI )); then
+            partition_info+=(
+                "size=200MiB, type=c12a7328-f81f-11d2-ba4b-00a0c93ec93b, uuid=$(get_uuid ${SOURCE_ROOT_DEV} efi PART_ENTRY_UUID), name=\"EFI System\""
+            )
+        fi
+        if (( PART_BOOT )); then
+            partition_info+=(
+                "size=1024MiB, type=0fc63daf-8483-4772-8e79-3d69d8477de4, uuid=$(get_uuid ${SOURCE_ROOT_DEV} boot PART_ENTRY_UUID), name=\"Boot partition\""
+            )
+        fi
+        if (( PART_ROOT )); then
+            partition_info+=(
+                "type=0fc63daf-8483-4772-8e79-3d69d8477de4, uuid=$(get_uuid ${SOURCE_ROOT_DEV} root PART_ENTRY_UUID), name=\"Root filesystem\""
+            )
+        fi
+        partition_info="$(lines "${partition_info[@]}")"
+        echo "$partition_info" | sfdisk "$TARGET_IMG"
+    fi
+    attach_image_loopdev "$TARGET_IMG"
+}
+
+attach_image_loopdev "$TARGET_PRIVATE_IMG" || {
+    # Target image exists but was unable to attack to loop device
+    if [ -e "$TARGET_PRIVATE_IMG" ]; then exit 1; fi
+
+    info "Initializing empty private image..."
+    # Set TEMPLATE_ROOT_SIZE and TEMPLATE_PRIVATE_SIZE
+    set_template_image_sizes "10G" "5G" "2G" "5G"
+    truncate -s "$TEMPLATE_PRIVATE_SIZE" "${TARGET_PRIVATE_IMG}" || exit 1
+    attach_image_loopdev "$TARGET_PRIVATE_IMG"
+}
+
+# --- MOUNT TARGET IMAGE PARTITIONS --------------------------------------------
+TARGET_DEV="$(get_image_loop "$TARGET_IMG")"
+export TARGET_DEV
+
+info "Mounting root filesystem..."
+mount_partition "root" "$TARGET_DEV" "${INSTALLDIR}" || {
+    info "Creating root filesystem..."
+    root_dev="$(get_partition_by_type $TARGET_DEV "root")"
+    root_uuid="$(get_uuid $SOURCE_ROOT_DEV root UUID)"
+    /sbin/mkfs.ext4 -q -F -U "$root_uuid" "${root_dev}"
+    mount_partition "root" "$TARGET_DEV" "${INSTALLDIR}"
+}
+mkdir -p "${INSTALLDIR}/rw"
+
+info "Mounting boot filesystem..."
+mount_partition "boot" "$TARGET_DEV" "${INSTALLDIR}/boot" || {
+    boot_dev="$(get_partition_by_type $TARGET_DEV "boot")" && {
+        info "Creating boot filesystem..."
+        boot_uuid="$(get_uuid $SOURCE_ROOT_DEV boot UUID)"
+        /sbin/mkfs.ext4 -q -F -U "$boot_uuid" "${boot_dev}"
+        mount_partition "boot" "$TARGET_DEV" "${INSTALLDIR}/boot"
+    } || true  # Boot drive not enabled
+}
+
+info "Mounting EFI filesystem..."
+mount_partition "efi" "$TARGET_DEV" "${INSTALLDIR}/boot/efi" || {
+    info "Creating EFI filesystem..."
+    efi_dev="$(get_partition_by_type $TARGET_DEV "efi")"
+    efi_uuid="$(get_uuid $SOURCE_ROOT_DEV efi UUID)"
+    /sbin/mkfs.vfat -F 32 -i "$efi_uuid" "${efi_dev}"
+    mount_partition "efi" "$TARGET_DEV" "${INSTALLDIR}/boot/efi"
+}
+#mount_partition "bios" "$TARGET_DEV" "${INSTALLDIR}/bios" || true
+#mount_partition "swap" "$TARGET_DEV" "${INSTALLDIR}/swap" || true
+
+# --- MOUNT TARGET PRIVATE IMAGE PARTITIONS ------------------------------------
+TARGET_PRIVATE_DEV="$(get_image_loop "$TARGET_PRIVATE_IMG")"
+export TARGET_PRIVATE_DEV
+
+info "Mounting private filesystem..."
+mount_partition "private" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw" || {
+    info "Creating private filesystem..."
+    private_dev="$(get_partition_by_type $TARGET_PRIVATE_DEV "private")"
+    private_uuid="$(get_uuid $SOURCE_PRIVATE_DEV private UUID)" \
+    || private_uuid="$(get_uuid $TARGET_PRIVATE_DEV private UUID)"
+    /sbin/mkfs.ext4 -q -F -U "$private_uuid" "${private_dev}"
+    mount_partition "root" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw"
+}
+
+
+# ==============================================================================
+# Clone source partitions
+# ==============================================================================
+if [ ! -z "${SOURCE_ROOT_DEV}" ]; then
+    info "Cloning source partitions..."
+    "${SCRIPTSDIR}/02_install_groups.sh"
+fi
+
+
+exit ${RETCODE}
