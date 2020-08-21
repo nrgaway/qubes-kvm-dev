@@ -1,0 +1,1555 @@
+
+################################################################################
+WIP:
+  RPM:
+    rpm --showrc
+
+  BREAKPOINTS:
+    qubes.vm.__init__.BaseVM.create_config_file
+
+  TESTS:
+    - systemctl stop qubesd.service
+    - killall widget-wrapper
+
+  # Could not open '/var/lib/qubes/vm-templates/fedora-32/root-dirty.img': Permission denied
+  ISSUE:
+    - Libvirt/qemu does not have permission to write/read?
+    - Default permissions also do not allow user to write within dir.
+    - NOTE: Qubes install group is set to user, KVM install set to qubes.
+    1: Changed all group permissions from 'qubes' to 'user' in /var/lib/qubes
+       Revert
+    2: Add write permissions for group for all files and dirs in /var/lib/qubes
+       Add read permissions for group on all VM images files
+       FAIL
+    3: Change all group permissions to 'libvirt'
+       FAIL
+    4: Add libvirt, kvm, qemu to qubes group (may not need them all)
+       PASS - Keep original file permissions adding libvirt, kvm, qemu to qubes
+              group.  TODO, test to see if all need to be added.
+
+  kvmchand issues:
+    - Can't start daemon in dom0 if some VM is already running
+    - Can't add device to VM - pcie.0 does not support hotplugging
+      # '{"execute":"chardev-add", "arguments": {"id":"charshmem0", "backend":{ "type": "socket", "data": {"server": false, "addr": {"type": "unix", "data": {"path": "/tmp/kvmchand/ivshmem_socket"}}}}}}'
+      # '{"execute":"device_add", "arguments": {"driver":"ivshmem-doorbell", "id":"shmem0", "chardev":"charshmem0", "vectors": 2}}'
+      # '{"execute":"device_add", "arguments": {"driver":"ivshmem-doorbell", "id":"shmem0", "chardev":"charshmem0", "vectors": 2, "bus": "pci.1"}}'
+
+      # Unable to obtain device fd for 0000:00:0c.0: No such device!
+    - Additional devices are being added to additional IOMMU groups.  kvmchand
+      currently only supports devices being added to same IOMMU group
+
+  kvmchand fixed:
+    - BUG - libvirt.c setting chardev
+
+  kvmchand logs:
+    ############################################################################
+    ##
+    ## ISSUE:  VM:  PCIe -> PCI Bridge
+    ##
+    [  371.731242] shpchp 0000:07:00.0: Latch open on Slot(3)
+    [  371.731633] shpchp 0000:07:00.0: Button pressed on Slot(3)
+    [  371.732048] shpchp 0000:07:00.0: Card not present on Slot(3)
+    [  371.732575] shpchp 0000:07:00.0: PCI slot #3 - powering on due to button press
+    [  376.847049] shpchp 0000:07:00.0: No adapter on slot(3)
+
+    ############################################################################
+    ##
+    ## ISSUE:  DOM0: qrexec-daemon.c:128:sigchld_parent_handler: Connection to the VM failed
+    ##
+    ##  qrexec-daemon exits immediately if VM qrexec-agent is not started.
+    ##
+    ##  >>> sudo /usr/sbin/qrexec-daemon -q 12 fedora-32
+    ##  2020-08-11 04:26:20.901 qrexec-daemon[162941]: qrexec-daemon.c:128:sigchld_parent_handler: Connection to the VM failed
+    ##
+    ##  Wonder if setting env QREXEC_STARTUP_TIMEOUT makes any difference?
+    ##    NOPE, didn't seem to help
+    ##
+    ## *** SEEMS like issue is with kvmchand where it errors out if the guest
+    ##     side of the connection does not already exist?
+    ##       - IE:  Not waiting?
+    ##
+    ##  QUBES-DB:  HOST socket needs to be started before attaching VM socket
+    ##    QREXEC:  VM socket needs to be started before attaching HOST socket
+    ##
+    ## 04:12:13 - vm start
+    ## 04:13:51 - 98s - kvmchand start
+    ## 04:13:51 - 98s - qubes-db start
+    ## 04:13:55 - 102s - qubes-qrexec-agent start
+    ##
+    ## vm:
+    ##  qrexec-agent.init:
+    ##    libvchan_wait(ctrl_vchan)
+    ##    my_sd_notify(1, "READY=1");  # (remove_env[0=no,1=yes], "READY=1")
+
+    ####### HOST LOG FOLLOWS (no client log required)
+    # kvmchand connect - fedora-32 start
+    Aug 12 02:43:36 HOST [INFO] daemon/libvirt.c:617: Domain fedora-32(46, UUID: 095c78db-c061-4f3c-877a-8f429d0ac438) changed state (event: 4, detail: 0)!
+    Aug 12 02:43:36 HOST [WARN] daemon/libvirt.c:691: Unknown lifecycle event 10! Ignoring...
+    Aug 12 02:43:36 HOST [INFO] daemon/libvirt.c:617: Domain fedora-32(46, UUID: 095c78db-c061-4f3c-877a-8f429d0ac438) changed state (event: 2, detail: 0)!
+    Aug 12 02:43:36 HOST [INFO] daemon/libvirt.c:262: About to attach ivshmem device at /tmp/kvmchand/ivshmem_socket, index 0
+    Aug 12 02:43:36 HOST [INFO] daemon/ivshmem.c:534: Got connection from PID: 236274
+
+    #### PASS: server=0, client=46, port=111
+    #### HOST: qubes-db
+    # >>> /usr/sbin/qubesdb-daemon 46 fedora-32 (NO VM DAEMON)
+    # HOST: qubesdb.fedora-32.sock
+    Aug 12 02:49:48 HOST [INFO] daemon/localhandler.c:600: Client connected! fd: 10
+    Aug 12 02:49:48 HOST [INFO] daemon/connections.c:118: vchan_init called! server_dom: 0, client_dom: 46, port 111, read_min: 4096, write_min: 4096
+    Aug 12 02:49:48 HOST [INFO] daemon/libvirt.c:262: About to attach ivshmem device at /tmp/kvmchand/ivshmem_socket, index 2
+    Aug 12 02:49:48 HOST [INFO] daemon/ivshmem.c:534: Got connection from PID: 236274
+
+    #### PASS:
+    ####   VM: qubes-db: VM connection
+    # >>> systemctl start qubes-db.service (HOST ALREADY CONNECTED)
+    # NO host log entries
+    Aug 12 02:57:04 VM   systemd[1]: Starting Qubes DB agent...
+    Aug 12 02:57:04 VM   kvmchand[808]: [INFO] daemon/localhandler.c:600: Client connected! fd: 8
+    Aug 12 02:57:04 VM   kvmchand[804]: [INFO] daemon/vfio.c:1109: resp from host: err: 0, ret: 2
+    Aug 12 02:57:08 VM   kvmchand[808]: [INFO] daemon/localhandler.c:324: fds: {9, 10, 11, 12, 13}
+    Aug 12 02:57:08 VM   kernel: vfio-pci 0000:02:03.0: vfio-noiommu device opened by user (kvmchand:807)
+    Aug 12 02:57:08 VM   systemd[1]: Started Qubes DB agent.
+
+    #### FAIL: server=0, client=46, port=111
+    ####   VM: qubes-db: VM connection
+    # >>> systemctl start qubes-db.service (HOST NOT CONNECTED)
+    Aug 12 03:25:42 HOST kvmchand[237779]: [WARN] daemon/connections.c:289: Tried to connect to non-existent vchan at dom 0 port 111
+    ...
+    Aug 12 03:25:42 VM   systemd[1]: Starting Qubes DB agent...
+    Aug 12 03:25:42 VM   kvmchand[791]: [INFO] daemon/localhandler.c:600: Client connected! fd: 8
+    Aug 12 03:25:42 VM   kvmchand[790]: [INFO] daemon/vfio.c:1109: resp from host: err: 1, ret: 0
+    Aug 12 03:25:42 VM   qubesdb-daemon[898]: FATAL: vchan initialization failed
+    Aug 12 03:25:42 VM   kvmchand[791]: [INFO] daemon/localhandler.c:614: Client disconnected! fd: 8
+    Aug 12 03:25:42 VM   systemd[1]: qubes-db.service: Main process exited, code=exited, status=1/FAILURE
+    Aug 12 03:25:42 VM   systemd[1]: qubes-db.service: Failed with result 'exit-code'.
+    Aug 12 03:25:42 VM   systemd[1]: Failed to start Qubes DB agent.
+
+    ############################################################################
+    #### FAIL: server=46, client=0, port=512
+    ####   VM: qubes-qrexec-agent: VM connection
+    # >>> systemctl start qubes-qrexec-agent.service (HOST NOT CONNECTED)
+    Aug 12 03:03:15 HOST [INFO] daemon/connections.c:118: vchan_init called! server_dom: 46, client_dom: 0, port 512, read_min: 4096, write_min: 4096
+    Aug 12 03:03:15 HOST [INFO] daemon/libvirt.c:262: About to attach ivshmem device at /tmp/kvmchand/ivshmem_socket, index 3
+    Aug 12 03:03:15 HOST [INFO] daemon/ivshmem.c:534: Got connection from PID: 236274
+    Aug 12 03:03:15 VM   systemd[1]: Starting Qubes remote exec agent...
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: [1af4:1110] type 00 class 0x050000
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: reg 0x10: [mem 0x00000000-0x000000ff]
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: reg 0x14: [mem 0x00000000-0x00000fff]
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: reg 0x18: [mem 0x00000000-0x00003fff 64bit pref]
+    Aug 12 03:03:15 VM   kvmchand[808]: [INFO] daemon/localhandler.c:600: Client connected! fd: 9
+    Aug 12 03:03:15 VM   qrexec-agent[959]: 2020-08-12 03:03:15.123 qrexec-agent[959]: qrexec-agent.c:376:init: qrexec-agent.init: ctrl_vchan call
+    Aug 12 03:03:15 VM   kvmchand[804]: [INFO] daemon/vfio.c:1109: resp from host: err: 0, ret: 3
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: BAR 2: assigned [mem 0xc8008000-0xc800bfff 64bit pref]
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: BAR 1: assigned [mem 0xc800c000-0xc800cfff]
+    Aug 12 03:03:15 VM   kernel: pci 0000:02:04.0: BAR 0: assigned [mem 0xc800d000-0xc800d0ff]
+    Aug 12 03:03:15 VM   kernel: vfio-pci 0000:02:04.0: Adding to iommu group 2
+    Aug 12 03:03:15 VM   kernel: vfio-pci 0000:02:04.0: Adding kernel taint for vfio-noiommu group on device
+    Aug 12 03:03:19 VM   kvmchand[808]: [INFO] daemon/localhandler.c:324: fds: {10, 11, 12, 13, 14}
+    Aug 12 03:03:19 VM   qrexec-agent[959]: 2020-08-12 03:03:19.139 qrexec-agent[959]: qrexec-agent.c:378:init: qrexec-agent.init: ctrl_vchan returned
+    Aug 12 03:03:19 VM   kernel: vfio-pci 0000:02:04.0: vfio-noiommu device opened by user (kvmchand:807)
+    Aug 12 03:04:45 VM   systemd[1]: qubes-qrexec-agent.service: start operation timed out. Terminating.
+    Aug 12 03:04:45 VM   kvmchand[808]: [INFO] daemon/localhandler.c:614: Client disconnected! fd: 9
+    Aug 12 03:04:45 VM   systemd[1]: qubes-qrexec-agent.service: Failed with result 'timeout'.
+    Aug 12 03:04:45 VM   systemd[1]: Failed to start Qubes remote exec agent.
+    Aug 12 03:04:45 VM   kvmchand[804]: [INFO] daemon/vfio.c:1109: resp from host: err: 0, ret: 0
+    Aug 12 03:04:45 VM   kernel: vfio-pci 0000:02:04.0: EDR: ACPI event 0x3 received
+    Aug 12 03:04:45 VM   kernel: vfio-pci 0000:02:04.0: Relaying device request to user (#0)
+    Aug 12 03:04:45 VM   kvmchand[804]: [INFO] daemon/vfio.c:1250: VFIO requesting ivshmem detach. fd: 33
+    Aug 12 03:04:45 VM   kvmchand[804]: [INFO] daemon/vfio.c:705: Stopping outgoing eventfd handler thread.
+    Aug 12 03:04:45 VM   kvmchand[804]: [INFO] daemon/vfio.c:205: Removing unused group /dev/vfio/noiommu-2.
+    Aug 12 03:04:45 VM   kernel: vfio-pci 0000:02:04.0: Removing from iommu group 2
+
+    #### FAIL: server=46, client=0, port=512
+    #### HOST: qrexec
+    # >>> /usr/sbin/qrexec-daemon 46 fedora-32 user
+    # HOST: error
+    Aug 12 02:54:31 HOST [INFO] daemon/localhandler.c:600: Client connected! fd: 11
+    Aug 12 02:54:31 HOST [WARN] daemon/connections.c:289: Tried to connect to non-existent vchan at dom 46 port 512
+    Aug 12 02:54:31 HOST [INFO] daemon/localhandler.c:614: Client disconnected! fd: 11
+
+    #### PASS: server=46, client=0, port=512
+    ####   VM: qubes-qrexec-agent: VM connection
+    # >>> systemctl start qubes-qrexec-agent.service (CONNECT HOST AFTER STARTING)
+    ## VM START
+    Aug 12 03:14:29 HOST [INFO] daemon/connections.c:118: vchan_init called! server_dom: 46, client_dom: 0, port 512, read_min: 4096, write_min: 4096
+    Aug 12 03:14:29 HOST [INFO] daemon/libvirt.c:262: About to attach ivshmem device at /tmp/kvmchand/ivshmem_socket, index 4
+    Aug 12 03:14:29 HOST [INFO] daemon/ivshmem.c:534: Got connection from PID: 236274
+    ...
+    ## HOST START
+    Aug 12 03:14:43 HOST [INFO] daemon/localhandler.c:600: Client connected! fd: 11  <---- HOST CONNECTION MESSAGE
+    Aug 12 03:14:28 localhost systemd[1]: Starting Qubes remote exec agent...
+    ...
+    Aug 12 03:14:28 VM   qrexec-agent[995]: 2020-08-12 03:14:28.683 qrexec-agent[995]: qrexec-agent.c:376:init: qrexec-agent.init: ctrl_vchan call
+    Aug 12 03:14:28 VM   kvmchand[808]: [INFO] daemon/localhandler.c:600: Client connected! fd: 9
+    Aug 12 03:14:28 VM   kvmchand[804]: [INFO] daemon/vfio.c:1109: resp from host: err: 0, ret: 4
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: [1af4:1110] type 00 class 0x050000
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: reg 0x10: [mem 0x00000000-0x000000ff]
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: reg 0x14: [mem 0x00000000-0x00000fff]
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: reg 0x18: [mem 0x00000000-0x00003fff 64bit pref]
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: BAR 2: assigned [mem 0xc8008000-0xc800bfff 64bit pref]
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: BAR 1: assigned [mem 0xc800c000-0xc800cfff]
+    Aug 12 03:14:28 VM   kernel: pci 0000:02:05.0: BAR 0: assigned [mem 0xc800d000-0xc800d0ff]
+    Aug 12 03:14:28 VM   kernel: vfio-pci 0000:02:05.0: Adding to iommu group 2
+    Aug 12 03:14:28 VM   kernel: vfio-pci 0000:02:05.0: Adding kernel taint for vfio-noiommu group on device
+    Aug 12 03:14:32 VM   kvmchand[808]: [INFO] daemon/localhandler.c:324: fds: {10, 11, 12, 13, 14}
+    Aug 12 03:14:32 VM   qrexec-agent[995]: 2020-08-12 03:14:32.693 qrexec-agent[995]: qrexec-agent.c:378:init: qrexec-agent.init: ctrl_vchan returned
+    Aug 12 03:14:32 VM   kernel: vfio-pci 0000:02:05.0: vfio-noiommu device opened by user (kvmchand:807)
+    Aug 12 03:14:43 VM   systemd[1]: Started Qubes remote exec agent.
+
+    ################################################################################
+    ##
+    ## ISSUE:  fedora-32 VM:  qubes-db and qrexec fail to start
+    ##
+    ##  - Does dom0 qubes-db service need to be started first?
+    ##  - Dom0 qrexec service will not start unless VM service started
+    ##
+
+    # daemon/daemon.c:385: guest_main: start
+    VFIO:         daemon/daemon.c:387: guest_main: spawn_vfio_process           *** SPAWN ***
+    LOCALHANDLER: daemon/daemon.c:410: guest_main: spawn localhandler           *** SPAWN ***
+
+    #### THREAD 'run_vfio_loop'
+    VFIO:         daemon/daemon.c:393: guest_main: vfio==0
+    VFIO:         daemon/daemon.c:398: guest_main: close_unused_socketpair
+    VFIO:         daemon/daemon.c:402: guest_main: run_vfio_loop
+                  1158: run_vfio_loop():
+                  1224:   vifo_init()
+                  1052:     connect_to_host_daemon()
+                  990:        # connected to host
+
+    #### MAIN THREAD
+    #MAIN:        daemon/daemon.c:432: guest_main: close_unused_fds
+    #MAIN:        daemon/daemon.c:437: guest_main: listen_for_messages
+    #MAIN:        daemon/daemon.c:442: guest_main: main_vfio_sv
+    #MAIN:        daemon/daemon.c:444: guest_main: main_localhsndler_sv
+    IPCSERVER:    daemon/daemon.c:447: guest_main: ipc_server_start
+
+    LOCALHANDLER: daemon/daemon.c:419: guest_main: close_unused_socketpair
+    MAIN:         daemon/daemon.c:455: guest_main: sd_notify                    *** NOTIFY TOO EARLY ***
+    LOCALHANDLER: daemon/daemon.c:415: guest_main: set prctl
+
+    VFIO:         daemon/vfio.c:1188: run_vfio_loop: Got ivshmem device: 0000:02:01.0
+    VFIO:         daemon/vfio.c:1204: run_vfio_loop: Some ivshmem devices aren't bound to vfio-pci. Attempting to bind...
+
+    LOCALHANDLER: daemon/daemon.c:419: guest_main: close_unused_socketpair
+    LOCALHANDLER: daemon/daemon.c:423: guest_main: run_localhandler_loop
+
+    VFIO:         daemon/vfio.c:1219: run_vfio_loop: Successfully bound ivshmem devices.
+
+    # vfio-pci 0000:02:01.0: vfio-noiommu device opened by user (kvmchand:739)
+
+    *** REALLY NEED TO NOTIFY AFTER HERE...
+    VFIO:         daemon/vfio.c:990: connect_to_host_daemon: Successfully connected to host daemon.
+
+    # kvmchand.service: start operation timed out. Terminating.
+    # kvmchand.service: Failed with result 'timeout'.
+
+
+
+################################################################################
+POST-INSTALL:
+  kvmchand:
+    journalctl -xn -u kvmchand | less
+    dom0:
+        # kvmchand -d or kvmchand
+      - systemctl start kvmchand
+      - qvm-prefs fedora-32 debug true
+
+    vm:
+      config:
+        group:
+          - add qubes group (101)
+          - add user to qubes group
+        dnf - disable repo: /etc/yum.repos.d/qubes-r4.repo
+        proc-xen.mount: remove
+          mount: /proc/xen: mount point does not exist.
+          # Failed to insert module 'xen_blkback': No such device
+          # Failed to insert module 'xen_gntalloc': No such device
+          # Failed to insert module 'xen_gntdev': No such device
+          # Failed to insert module 'xen_privcmd': No such device
+          # Failed to insert module 'xen_evtchn': No such device
+          # Failed to insert module 'xen_netback': No such device
+          # Failed to insert module 'xen_pciback': No such device
+          # Failed to insert module 'xen_scsiback': No such device
+          #Failed to insert module 'xen_acpi_processor': No such device
+
+
+      check:
+        # Confirm ivshmem device exists in VM (lspci)
+        # 0001:00:00.0 RAM memory: Red Hat, Inc. Inter-VM shared memory (rev 01)
+        - /sys/bus/pci/drivers/vfio-pci: |
+          lsinitrd /boot/initramfs-$(uname -r).img | grep vfio
+          dracut --force --add-drivers vfio-pci --kver $(uname -r)
+          GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX rd.driver.pre=vfio-pci"
+
+        VFIO_NOIOMMU:
+          custom-kernel:
+            install-deps:
+              sudo dnf install fedpkg fedora-packager rpmdevtools ncurses-devel pesign grubby qt3-devel libXi-devel gcc-c++
+              sudo /usr/libexec/pesign/pesign-authorize
+            config:
+              fedpkg clone -a kernel
+              cd kernel
+              git checkout origin/f32
+              git branch f32
+              git checkout f32
+              sudo dnf builddep kernel.spec
+              # kernel-local:
+              #    CONFIG_VFIO=y
+              #    CONFIG_VFIO_PCI=y
+              #    CONFIG_VFIO_NOIOMMU=y
+              #    CONFIG_VFIO_IOMMU_TYPE1=y
+              # kernel.spec:  uncomment '# define buildid .local' to '%define buildid .local'
+            build:
+              fedpkg --release f32 local
+            install:
+              cd x86_64
+              sudo dnf install --nogpgcheck kernel-[0-9]*.x86_64.rpm kernel-core-[0-9]*.x86_64.rpm kernel-modules-[0-9]*.x86_64.rpm kernel-modules-extra-[0-9]*.x86_64.rpm kernel-devel-[0-9]*.x86_64.rpm
+              sudo grub2-mkconfig -o /etc/grub2-efi.cfg
+              sudo grub2-mkconfig -o /etc/grub2.cfg
+
+        - /sys/bus/pci/drivers/vfio-pci/%s
+        - /sys/module/vfio/parameters/enable_unsafe_noiommu_mode  # VFIO_NOIOMMU
+          - /dev/vfio/noiommu-0
+        - /sys/kernel/iommu_groups  # IOMMU mode only
+          - /sys/kernel/iommu_groups/%s/devices
+          - /dev/vfio/%s
+
+      start:
+        # kvmchand -g
+        systemctl start kvmchand
+
+      check:
+        kvmchand:
+          #### Start qrexec-agent in VM
+          #systemctl start qubes-qrexec-agent.service
+          /usr/lib/qubes/qrexec-agent --no-fork-server
+
+          ### Test from Dom0
+          # >>> /usr/bin/qrexec-client -d fc32-I440-UEFI root:'bash'
+          # >>> hostname
+
+
+
+################################################################################
+TODO:
+  dom0:
+    kvmchand:
+      - Add dom0 kvmchand.service to core-vchan-kvmchand
+      - Enable when installed
+
+  templates:
+    # NOTES:
+    #   - backup etc/systemd/system to system.orig + remove most configs
+    #   - backup etc/xdg to xdg.orig + remove most configs
+    - Format and add UEFI bios configuration
+    - Update /etc/fstab to refer to /vd? instead of /xvd?
+    - Mount UEFI partition
+    - Remove xen mount
+    kvmchand:
+      - Add vm kvmchand.service to core-vchan-kvmchand
+        echo 1 > /sys/module/vfio/parameters/enable_unsafe_noiommu_mode
+      - Enable when installed
+      - enable vfio-pci on boot to be able to remove from systemd unit file
+        - dracut --force --add-drivers vfio-pci --kver $(uname -r)
+      issues:
+        - need to install custom kernel in VM that allows running in
+          VFIO-NOIOMMU mode.  Do not include any other kernels this mode is
+          disabled in mainline kernels.
+        - may need to install and enable qemu-guest-agent???
+        - may need selinux=0
+        *** TESTS:
+          - Using new guest unit file:
+            - FAIL: no qemu-commandline
+              - FAIL: with qemu-guest-agent
+            - as root and user
+            - with selinux enabled
+
+    grub.qubes:
+        kernelopts: console=ttyS0
+        dracut -f
+    systemd-enable:
+    systemd-disable:
+      - qubes-network.service
+      - qubes-firewall.service
+      - qubes-iptables.service
+      - qubes-gui-agent.service  # reference to meminfo-writer
+      - qubes-input-sender-keyboard-mouse@.service
+      - qubes-input-sender-keyboard@.service
+      - qubes-input-sender-mouse@.service
+      - qubes-input-sender-tablet@.service
+    /lib/systemd/system:
+      - disabled NetworkManager.service.d/30_qubes
+      - disabled NetworkManager-wait-online.service.d/30_qubes
+    systemd:
+      - kvmchand
+      - qubes-mount-dirs.service
+      - qubes-qrexec-agent.service
+      - qubes-rootfs-resize.service
+    usr_lib_qubes:
+      - init/mount-dirs.sh
+      - init/qubes-sysinit.sh
+      - init/resize-rootfs-if-needed.sh
+      - resize-rootfs.sh
+    serial console:
+      grub-kernelopts: audit=0 console=ttyS0
+      systemd: |
+        enable serial-getty@ttyS0.service
+        symlink /etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service → /usr/lib/systemd/system/serial-getty@.service
+        # ln -s /usr/lib/systemd/system/serial-getty@.service serial-getty@ttyS0.service
+
+    qubes-packages:
+      qubes-db:
+        qubes-db-4.1.7-1.fc32.x86_64.rpm
+        qubes-db-libs-4.1.7-1.fc32.x86_64.rpm
+        qubes-db-vm-4.1.7-1.fc32.x86_64.rpm
+        # dnf reinstall -y qubes-db-vm-4.1.7-1.fc32.x86_64.rpm qubes-db-4.1.7-1.fc32.x86_64.rpm qubes-db-libs-4.1.7-1.fc32.x86_64.rpm
+
+      qrexec:
+        # Qubes remote exec agent
+        qubes-core-qrexec-4.1.8-1.fc32.x86_64.rpm
+        qubes-core-qrexec-vm-4.1.8-1.fc32.x86_64.rpm
+        qubes-core-qrexec-libs-4.1.8-1.fc32.x86_64.rpm
+        qubes-libvchan-kvm-4.1.0-1.fc32.x86_64.rpm
+        python3-gbulb-0.6.1-1.fc32.x86_64.rpm
+        systemd:
+          #after: xendriverdomain.service
+          type: notify (daemon)
+          #pre: /bin/sh -c '[ -e /dev/xen/evtchn ] || modprobe xen_evtchn'
+          start: /usr/lib/qubes/qrexec-agent
+          alias: qubes-core-agent.service
+
+    WIP:
+      fedora-32:
+        RE-INIT SERVICES:
+          dbus-org.freedesktop.timesync1.service
+          multi-user.target.wants:
+            cups.path
+            cups.service
+            # kvmchand REMOVED FROM multi as its already in sysinit
+          printer.target.wants:
+            cups.service
+          sockets.target.wants:
+            cups.socket
+          sysinit.target.wants:
+            systemd-timesyncd.service
+            qubes-sysinit.service
+            qubes-early-vm-config.service
+            qubes-rootfs-resize.service
+            qubes-mount-dirs.service
+            qubes-misc-post.service
+            qubes-update-check.timer (qubes-update-check.service)
+            qubes-sync-time.timer (qubes-sync-time.service)
+
+################################################################################
+VIRSH NOTES:
+  connect: |
+    sudo virsh connect qemu:///system
+
+  list all vms: |
+    sudo virsh list --all
+    virsh -c qemu:///system list  # non-root
+  start: |
+    sudo virsh start fedora-32
+    sudo virsh start fedora-32 --console
+    virsh -c qemu:///system start fedora-32  # non-root
+  stop: |
+    sudo virsh shutdown fedora-32
+    sudo virsh destroy fedora-32
+  console:
+    virsh -c qemu:///system console fedora-32 --safe
+  monitor:
+    virsh qemu-monitor-command fc32-I440-UEFI --pretty '{"execute":"query-commands"}'
+    virsh qemu-monitor-command fc32-I440-UEFI --pretty '{"execute":"query-chardev"}'
+
+################################################################################
+CONFIG:
+  - Add 'qubes' group (101)
+  - Add BACKEND_VMM=kvm to qubes builder configuration AFTER
+    'qubes-os-master.conf' is loaded.
+      TODO: qubes-os-master.conf:
+        Change 'BACKEND_VMM=xen' to 'BACKEND_VMM ?= xen'
+        Create new 'kvm.conf'
+
+################################################################################
+ISSUES:
+  - sudo touch /etc/qubes-release
+    qubesadmin python package operates in local mode if 'qubes-release' file
+    exists, otherwise remote mode.
+
+  DISABLED:
+    - Replaced original /etc/dnf/dnf.conf with original.
+
+  libvchan:
+    - Does not wait for connection; modified qrexec to retry
+
+  qubesdb: # maybe qrexec
+    - Hard depend on xen for vchan.  Can runtime determine if xen or kvm?
+      - Look at C code that reads qubes-services/features, maybe read that file
+        on startup as save as global var)
+
+  qrexec:
+    - qvm-run not working
+    - manual connection works from host to vm
+
+  python-qubes:
+    - relies on dom0 being a VM
+
+  templates:
+    - HOW TO BUILD FOR BOTH XEN AND KVM?
+      - Maybe qubes-vchan-libvchan and core-vchan-kvm could also be installed
+        MAYBE just test the hypervisor.
+          - pre-pre-init that tests hypervisor and links to the proper
+            qubes-vchan-{xen/kvm}, then also add conditional for kvmchand based
+            on hypervisor.
+          - Test template on KVM then copy to Qubes to see if it works there.
+        - THEREFORE BUILD ALL VM-QUBES PACKAGES INCLUDING mem manager, etc and
+          control with conditional dropins.
+            INCLUDING core-vchan-xen
+    - no separate boot drive.
+      - Could make bootdrive feature to pick
+      #- MAYBE add post installation script that will automaticlly move the root
+      #  partition to make room for boot partiton (and optionally resize resize
+      #  (grow) it to pervent loss of space or insufficient space.
+      #    - Then the efi partition and be formatted and config copied over
+      #    - boot partition formmated and boot directory moved
+      - NO SEPARATE BOOT-DRIVE REQUIRED.
+        - Just install proper EFI filesystem when creating template, then it can
+          boot in either EFI or BIOS mode.
+        - Add qvm-featue 'bootdrive' to enable booting with separate boot
+          partition
+        - qvm tool can be used to either
+          - resize current grub bios partition and move boot dir
+          - create EFI partition for templates that did not configure it
+          - full convert, same as existing util
+
+    - Work on VM features
+    - need to install KVM-vm package
+    - going to need
+
+  qubes-kvm:
+    -
+
+  kernel:
+    - requires vfio-noiommu module to be enabled.
+      - May not require if libkvmchan can be fixed to work with viommu
+      - May be okay to enable option for regular qubes since it is not active
+        by default, otherwise will need a kvm package name
+
+
+################################################################################
+NOTES:
+  - Be sure to create new branch for KVM features
+  - Add a KVM option somewhere for building
+      rpm_spec already uses '@BACKEND_VMM@'
+  - Maybe sync up with nrgaway repo
+
+  dom0:
+    systemd-services:
+      # *** DISABLED ***
+      #qubes-qmemman.service:
+      #  type: notify (daemon)
+      #  start: /usr/bin/qmemmand (python)
+      #         from qubes.tools.qmemmand import main
+
+      # ENABlED
+      qubesd.service:
+        python: qubes.tools.qubesd
+        before: systemd-user-sessions.service
+        type: notify (daemon)
+        start: /usr/bin/qubesd (python)
+               from qubes.tools.qubesd import main
+
+      # ENABlED
+      qubes-qrexec-policy-daemon.service:
+        after: qubesd.service
+        type: simple (daemon)
+        start: /usr/bin/qrexec-policy-daemon (python)
+               from qrexec.tools.qrexec_policy_daemon import main
+
+      #########################################################################
+      ##
+      ## WIP:
+      ##
+      MERGE:
+
+        libkvmchan:
+          - Apply all patches directly to libkvmchan
+            # CONCLUSION:
+            #   - Might be better to include as submodule during active
+            #     development cycle to allow test changes
+            #       UNLESS ability to download and not unzip if dir exists
+            #
+            # SUBMODULE PROS:
+            # - ABILITY to work on code and build
+            #
+            # SUBMODULE CONS:
+            # - Would need to push changes from submodule as it would get
+            #   complicated if updating from main repo and submodule
+            #     - *** MAY BE MORE DIFFICULT TO DETERMINE IF REPO UPDATED ***
+            # - Not signed or md5sum?
+            #
+            # DOWNLOAD PROS:
+            # - Specific version
+            # - md5sum?
+            #
+            # DOWNLOAD CONS:
+            #
+            # submodule or download package?
+            #   - submodules seem to be controlled by qubes
+            #   - allows direct modification to code
+            # download:
+            #   - Can't modify code directly as it is unzipped at build time
+            #     (UNLESS there is an option to use unzipped code if code
+            #     directory already exists)?
+            #   - requires md5sum in most cases
+            #
+          - Include libkvmchan as a git submodule
+              # Other repos that contain git submodule packages
+              vmm-xen-stubdom-linux
+              vmm-xen-stubdom-legacy
+              installer-qubes-os
+              infrastructure
+
+              # External sources
+              blivet
+              core-libvirt + apply-patches + series-qubes
+              desktop-linux-awesome (small)
+              desktop-linux-i3 (small)
+              desktop-linux-xfce4-xfwm4 + series-debian:
+              grub2
+              grub2-theme
+              intel-microcode (small)
+              linux-firmware (small)
+              linux-gbulb (NO md5sum check):
+              linux-kernel
+              linux-pvgrub2
+              linux-scrypt
+              lorax
+              pungi
+              pykickstart
+              python-cffi + debian-pkg:
+              python-objgraph (NO md5sum check):
+              python-qasync
+              python-quamash (NO md5sum check):
+              python-u2flib-host + debian-pkg + debian-series:
+              python-xcffib + debian-pkg:
+              seabios
+              vmm-xen
+              vmm-xen-stubdom-legacy + submodule:
+
+
+
+          - Ensure submodule get expanded with 'make sources'
+          - Change host service name to 'kvmchand-host.service'
+          - Create MANUAL patches for additional deamon AND rootdir debug
+          - ADD notify for host as well
+          - test nrgawy signing and branch switch on get-sources
+
+      # ENABlED
+      kvmchand.service:
+        #tasks:
+        #  - /tmp/kvmchand/ivshmem_socket
+        #  - /tmp/kvmchand/localhandler_socket
+        after: qubesd.service
+        before: qubes-db-dom0.service
+        type: simple (daemon)
+        start: /usr/sbin/kvmchand -d (binary)
+
+
+      # ENABlED
+      qubes-db-dom0.service:
+        # Both agent and daemon for dom0
+        after: systemd-tmpfiles-setup.service
+        type: notify (daemon)
+        start: /usr/sbin/qubesdb-daemon 0 dom0 (binary)
+
+      # ENABlED
+      qubes-core.service:
+        #tasks:
+        #  - Backup /var/lib/qubes/qubes.xml
+        #  - /usr/lib/qubes/cleanup-dispvms
+        #  - Hide mounted devices from qubes-block list
+        #    udevadm trigger --action=change --subsystem-match=block
+        after: qubes-db-dom0.service libvirtd.service xenconsoled.service qubesd.service qubes-qmemman.service
+        type: oneshot
+        start: /usr/lib/qubes/startup-misc.sh
+        stop:
+          - /usr/bin/qvm-shutdown -q --all --wait
+          - /usr/bin/killall qubesdb-daemon
+
+      # *** DISABLED ***
+      #qubes-suspend.service:
+      #  type: oneshot
+      #  start: /usr/lib64/pm-utils/sleep.d/52qubes-pause-vms suspend suspend
+
+      #qubes-vm@.service:
+      #  before: systemd-user-sessions.service
+      #  after: qubesd.service qubes-meminfo-writer-dom0.service
+      #  type: oneshot
+      #  start: /usr/bin/qvm-start --skip-if-running %i
+
+  vm:
+    systemd-services:
+      # --- SYSINIT TARGETS ----------------------------------------------------
+      # ENABlED
+      qubes-db.service: core-qubesdb
+        # Qubes DB agent
+        after: systemd-modules-load.service fedora-loadmodules.service
+        start-pre: /bin/mkdir -p /var/run/qubes
+        start: /usr/sbin/qubesdb-daemon 0
+        type: notify
+        wanted-by: sysinit.target
+
+      # ENABlED
+      qubes-sysinit.service: core-agent-linux
+        # Init Qubes Services settings
+        DefaultDependencies: no
+        Before: sysinit.target
+        After:
+          qubes-db.service
+          #proc-xen.mount
+          #systemd-modules-load.service
+        Type: oneshot
+        RemainAfterExit: yes
+        ExecStart: /usr/lib/qubes/init/qubes-sysinit.sh
+        ISSUES: Contains xen references
+
+      # ENABlED
+      qubes-early-vm-config.service: core-agent-linux
+        # Early Qubes VM settings
+        before: sysinit.target
+        after: local-fs.target qubes-db.service
+        type: oneshot
+        start: /usr/lib/qubes/init/qubes-early-vm-config.sh
+        wanted-by: sysinit.target
+
+      # --- BASIC TARGETS ------------------------------------------------------
+      # *** KEEP DISABLED ***
+      #qubes-iptables.service: core-agent-linux
+      #  # Qubes base firewall settings
+      #  Type: oneshot
+      #  RemainAfterExit: yes
+      #  ExecStart: /usr/lib/qubes/init/qubes-iptables start
+
+      # --- MULTI-USER TARGETS -------------------------------------------------
+      # ENABlED
+      qubes-rootfs-resize.service: core-agent-linux
+        # Adjust root filesystem size
+        ##After: qubes-sysinit.service dev-xvda.device
+        After:
+          qubes-sysinit.service
+          #dev-vda.device
+        DefaultDependencies: no
+        Before: local-fs.target
+        Type: oneshot
+        RemainAfterExit: yes
+        ExecStart: /usr/lib/qubes/init/resize-rootfs-if-needed.sh
+
+      # ENABlED
+      qubes-qrexec-agent.service: core-qrexec
+        # Qubes remote exec agent
+        After: xendriverdomain.service
+        Type: notify
+        ##ExecStartPre: /bin/sh -c '[ -e /dev/xen/evtchn ] || modprobe xen_evtchn'
+        ExecStart: /usr/lib/qubes/qrexec-agent
+        Alias: qubes-core-agent.service
+
+      # *** KEEP DISABLED ***
+      #qubes-network.service: core-agent-linux
+      #  # Qubes network forwarding setup
+      #  ConditionPathExists: /var/run/qubes-service/qubes-network
+      #  #Before: network.target
+      #  After:
+      #    qubes-iptables.service
+      #    #network-pre.target
+      #  Type: oneshot
+      #  RemainAfterExit: yes
+      #  ExecStart: /usr/lib/qubes/init/network-proxy-setup.sh
+
+      # ENABlED:  GUI depends disabled
+      qubes-mount-dirs.service: core-agent-linux
+        # Initialize and mount /rw and /home
+        After:
+          qubes-sysinit.service
+          #dev-vdb.device
+        Before:
+          qubes-gui-agent.service:   XXX:  TEMP:  DEPEND DISABLED
+          #local-fs.target
+          #rw.mount home.mount
+        Type: oneshot
+        RemainAfterExit: yes
+        ExecStart: /usr/lib/qubes/init/mount-dirs.sh
+
+      # ENABLED:  Network depends disabled
+      qubes-misc-post.service: core-agent-linux
+        # Qubes misc post-boot actions
+        # UPDATES network proxy
+        # RESETS IP address
+        After:
+          qubes-mount-dirs.service
+          qubes-network.service:    XXX:  TEMP:  DEPEND DISABLED
+          qubes-firewall.service:   XXX:  TEMP:  DEPEND DISABLED
+          #network-pre.target
+        Type: oneshot
+        RemainAfterExit: yes
+        ExecStart: /usr/lib/qubes/init/misc-post.sh
+          /usr/lib/qubes/update-proxy-configs
+          /usr/lib/qubes/setup-ip
+        ExecStop: /usr/lib/qubes/init/misc-post-stop.sh
+
+      # *** KEEP DISABLED ***
+      #qubes-firewall.service: core-agent-linux
+      #  # Qubes firewall updater
+      #  ConditionPathExists: /var/run/qubes-service/qubes-firewall
+      #  After: qubes-iptables.service
+      #  Before: qubes-network.service
+      #  Type: notify
+      #  ExecStart: /usr/bin/qubes-firewall
+
+      # *** KEEP DISABLED ***
+      #qubes-gui-agent.service: gui-agent-linux
+      #  # Qubes GUI Agent
+      #  # DISABLED SERVICE via 'core-agent-linux/vm-systemd/75-qubes-vm.preset'
+      #  After: qubes-meminfo-writer.service qubes-mount-dirs.service
+      #  ConditionPathExists: !/var/run/qubes-service/lightdm
+      #  StandardInput: tty
+      #  TTYPath: /dev/tty7
+      #  ## custom PATH for X session can be set with ENV_PATH; otherwise
+      #  ## service's PATH is inherited
+      #  ##   Environment=ENV_PATH=/usr/local/bin:/usr/bin:/bin
+      #  ExecStartPre: /bin/sh -c /usr/lib/qubes/qubes-gui-agent-pre.sh
+      #  ExecStart: /usr/bin/qubes-gui $GUI_OPTS
+      #  ExecStopPost: /bin/rm -f /tmp/qubes-session-env /tmp/qubes-session-waiter
+      #  Environment: DISPLAY=:0
+      #  EnvironmentFile: -/var/run/qubes-service-environment
+
+      # ENABLED
+      qubes-update-check.timer: core-agent-linux
+        # Periodically check for updates
+        ConditionPathExists: /var/run/qubes-service/qubes-update-check
+        OnBootSec: 5min
+        OnUnitActiveSec: 2d
+
+      # STATIC - Triggered by qubes-update-check.timer
+      qubes-update-check.service: core-agent-linux
+        # Qubes check for VM updates and notify dom0
+        ConditionPathExists: /var/run/qubes-service/qubes-update-check
+        After: qubes-qrexec-agent.service
+        Type: oneshot
+        ExecStart: -/usr/lib/qubes/upgrades-status-notify
+
+      # Enabled
+      qubes-sync-time.timer: core-agent-linux
+        # Update system time each 6h
+        ConditionPathExists: !/var/run/qubes-service/clocksync
+        OnBootSec: 10s
+        OnUnitActiveSec: 6h
+
+      # STATIC - Triggered by qubes-sync-time.timer
+      qubes-sync-time.service: core-agent-linux
+        # Update time from ClockVM
+        After: qubes-qrexec-agent.service
+        ConditionPathExists: !/var/run/qubes-service/clocksync
+        ExecStart: /usr/bin/qvm-sync-clock
+        User: root
+
+      # *** KEEP DISABLED ***
+      #qubes-updates-proxy.service: core-agent-linux
+      #  # Description: Qubes updates proxy (tinyproxy)
+      #  ConditionPathExists: |/var/run/qubes-service/qubes-updates-proxy
+      #  After: qubes-iptables.service
+      #  ExecStartPre: /usr/lib/qubes/iptables-updates-proxy start
+      #  ExecStart: /usr/lib/qubes/tinyproxy-wrapper -d -c /etc/tinyproxy/tinyproxy-updates.conf
+      #  ExecStopPost: /usr/lib/qubes/iptables-updates-proxy stop
+      #  Restart: on-failure
+      #  RestartSec: 5s
+
+      # *** KEEP DISABLED ***
+      #qubes-updates-proxy-forwarder.socket: core-agent-linux
+      #  # Forward connection to updates proxy over Qubes RPC
+      #  ConditionPathExists: /var/run/qubes-service/updates-proxy-setup
+      #  ConditionPathExists: !/var/run/qubes-service/qubes-updates-proxy
+      #  ListenStream: 127.0.0.1:8082
+      #  BindToDevice: lo
+      #  Accept: true
+
+      # STATIC
+      #qubes-updates-proxy-forwarder@.service: core-agent-linux
+      #  # Forward connection to updates proxy over Qubes RPC
+      #  ExecStart: /usr/bin/qrexec-client-vm '' qubes.UpdatesProxy
+      #  StandardInput: socket
+      #  StandardOutput: inherit
+
+      # --- ON-DEMAND SERVICES -------------------------------------------------
+      # STATIC
+      #qubes-input-sender-keyboard-mouse@.service: app-linux-input-proxy
+      #  # Qubes input proxy sender (keyboard, fallback to mouse)
+      #  After: qubes-qrexec-agent.service
+      #  OnFailure: qubes-input-sender-mouse@%i.service
+      #  ExecStart: /usr/bin/qrexec-client-vm dom0 qubes.InputKeyboard /usr/bin/input-proxy-sender /dev/input/%i
+
+      # STATIC
+      #qubes-input-sender-keyboard@.service: app-linux-input-proxy
+      #  # Qubes input proxy sender (keyboard)
+      #  After: qubes-qrexec-agent.service
+      #  ExecStart: /usr/bin/qrexec-client-vm dom0 qubes.InputKeyboard /usr/bin/input-proxy-sender /dev/input/%i
+
+      # STATIC
+      #qubes-input-sender-mouse@.service: app-linux-input-proxy
+      #  # Qubes input proxy sender (mouse)
+      #  After: qubes-qrexec-agent.service
+      #  ExecStart: /usr/bin/qrexec-client-vm dom0 qubes.InputMouse /usr/bin/input-proxy-sender /dev/input/%i
+
+      # STATIC
+      #qubes-input-sender-tablet@.service: app-linux-input-proxy
+      #  # Qubes input proxy sender (tablet/touchscreen)
+      #  After: qubes-qrexec-agent.service
+      #  ExecStart: /usr/bin/qrexec-client-vm dom0 qubes.InputTablet /usr/bin/input-proxy-sender /dev/input/%i
+
+################################################################################
+BUILD:
+  Build Errors:
+    - Seems like building with 32 cores breaks compiling libvirt since some
+      sections compile too fast resulting in a `FileNotFound` error.  In this
+      case copy '~/.rpmmacros' to 'chroot-dom0-fc32/home/user'.
+
+  Makefile:
+    ifeq ($(BACKEND_VMM),xen)
+    endif
+
+  Spec:
+    %define backend_vmm @BACKEND_VMM@
+    %if x%{?backend_vmm} == xxen
+    %endif
+
+  Components:
+    WIP: REBUILD
+      NOTES:
+        core-vchan-libkvmchan:
+          - install packages changed. Added -libs, -host and -vm packages
+
+    # kvm: startup.sh: Only run xen specific code if hypervisor is xen
+    # kvm: Add hypervisor.sh for xen/kvm detection
+
+                             P F D A (Fedora, Debian, Arch packaging complete, P=Pushed latest)
+    kvm:                     X X . . # master
+    core-libvirt:            X X . . # kvm
+    core-vchan-libkvmchan:   X X . . # master
+    core-vchan-kvm:          X X . . # master
+    core-qubesdb:            X X . . # kvm
+    core-qrexec:             X X . . # kvm
+    linux-utils:             X X . . # kvm: Makefile.builder has debian+arch commented out
+   #python-cffi:             - - - - # master
+   #python-xcffib:           - - - - # master
+   #python-quamash:          - - - - # master
+   #python-objgraph:         - - - - # master
+   #python-hid:              - - - - # master
+   #python-u2flib-host:      - - - - # master
+   #python-qasync:           - - - - # master
+    core-admin:              X X . . # kvm
+   #core-admin-client:       - - - - # master
+   #core-admin-addon-whonix: - - - - # master
+   #core-admin-linux:        - - - - # master
+    core-agent-linux:        X X . . # kvm: debian/control has python-nautilus hack
+    linux-kernel:            X X - - # vfio_noiommu: TODO: requires kernel-kvm package
+   #artwork:                 - - - - # master
+   #grub2:                   - - - - # master
+   #grub2-theme:             - - - - # master
+    gui-common:              . . . . # DISABLE: May not be issue if gui features not enabled
+    gui-daemon:              . . . . # DISABLE: May not be issue if gui features not enabled
+    gui-agent-linux:         . . . . # DISABLE: May not be issue if gui features not enabled
+   #app-linux-split-gpg:     - - - - # master
+   #app-thunderbird:         - - - - # master
+   #app-linux-pdf-converter: - - - - # master
+   #app-linux-img-converter: - - - - # master
+    app-linux-input-proxy:           # DISABLE: May not be issue if gui features not enabled
+   #app-linux-usb-proxy:     - - - - # master
+   #app-linux-snapd-helper:  - - - - # master
+   #app-shutdown-idle:       - - - - # master
+   #app-yubikey:             - - - - # master
+   #app-u2f:                 - - - - # master
+   #mgmt-salt:               - - - - # master
+   #mgmt-salt-base:          - - - - # master
+   #mgmt-salt-base-topd:     - - - - # master
+   #mgmt-salt-base-config:   - - - - # master
+   #mgmt-salt-dom0-qvm:      - - - - # master
+   #mgmt-salt-dom0-virtual-machines: # master
+   #mgmt-salt-dom0-update:   - - - - # master
+   #infrastructure:          - - - - # master
+   #meta-packages:           - - - - # master
+   #manager:                 - - - - # master
+   #desktop-linux-common:    - - - - # master
+   #desktop-linux-kde:       - - - - # master
+   #desktop-linux-xfce4:     - - - - # master
+   #desktop-linux-xfce4-xfwm4: - - - # master
+   #desktop-linux-i3:        - - - - # master
+   #desktop-linux-i3-settings-qubes: # master
+   #desktop-linux-awesome:   - - - - # master
+   #desktop-linux-manager:   - - - - # master
+   #grubby-dummy:            - - - - # master
+   #linux-pvgrub2:           - - - - # master
+   #linux-gbulb:             - - - - # master
+   #linux-scrypt:            - - - - # master
+   #linux-template-builder:  - - - - # master
+   #### INSTALLER
+   #installer-qubes-os:      - - - - # master
+   #qubes-release:           - - - - # master
+   #pykickstart:             - - - - # master
+   #blivet:                  - - - - # master
+   #lorax:                   - - - - # master
+   #lorax-templates:         - - - - # master
+   #pungi:                   - - - - # master
+   #anaconda:                - - - - # master
+   #anaconda-addon:          - - - - # master
+   #linux-yum:               - - - - # master
+   #linux-deb:               - - - - # master
+   #tpm-extra:               - - - - # master
+   #trousers-changer:        - - - - # master
+   #antievilmaid:            - - - - # master
+   #### BUILDERS
+    builder:                 . . . . # nrgaway
+    builder-debian:          X X - - # master
+   #builder-rpm:             - - - - # master
+    kvm-dev:                 . . . . # nrgaway
+
+################################################################################
+INSTALL:
+  qubes-artwork
+     replacing  desktop-backgrounds-compat.noarch 32.0.0-3.fc32
+     replacing  fedora-logos.x86_64 30.0.2-4.fc32
+  qubes-core-dom0-linux-kernel-install
+     replacing  os-prober.x86_64 1.77-4.fc32
+  qubes-menus
+     replacing  redhat-menus.noarch 12.0.2-17.fc32
+
+  Running scriptlet: python3-docutils-0.15.2-4.fc32.noarch
+  Running scriptlet: xen-libs-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-utils-libs-4.1.10-1.fc32.x86_64
+  Running scriptlet: xen-hypervisor-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: xen-runtime-2001:4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-core-qrexec-dom0-4.1.8-1.fc32.x86_64                                                                                        51/88
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              52/88
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              52/88
+  Running scriptlet: qubes-core-dom0-linux-4.1.6-1.fc32.x86_64                                                                                         53/88
+  Running scriptlet: qubes-core-dom0-linux-4.1.6-1.fc32.x86_64                                                                                         53/88
+  Running scriptlet: qubes-gui-daemon-4.1.7-1.fc32.x86_64                                                                                              56/88
+  Running scriptlet: qubes-gui-daemon-4.1.7-1.fc32.x86_64                                                                                              56/88
+  Running scriptlet: qubes-manager-4.1.10-1.fc32.noarch                                                                                                57/88
+  Running scriptlet: qubes-desktop-linux-common-4.1.3-1.fc32.noarch                                                                                    58/88
+  Running scriptlet: salt-minion-3001rc1-2.fc32.noarch                                                                                                 61/88
+  Running scriptlet: qubes-mgmt-salt-base-topd-4.1.1-1.fc32.noarch                                                                                     63/88
+  Running scriptlet: qubes-mgmt-salt-base-config-4.1.0-1.fc32.noarch                                                                                   64/88
+  Running scriptlet: qubes-mgmt-salt-base-4.1.2-1.fc32.noarch                                                                                          67/88
+  Running scriptlet: qubes-mgmt-salt-dom0-qvm-4.1.3-1.fc32.noarch                                                                                      68/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         69/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         69/88
+  Running scriptlet: qubes-mgmt-salt-dom0-update-4.1.3-1.fc32.noarch                                                                                   71/88
+  Running scriptlet: qubes-desktop-linux-manager-4.1.5-1.fc32.noarch                                                                                   72/88
+  Upgrading        : xen-2001:4.13.1-4.fc32.x86_64                                                                                                     75/88
+  Obsoleting       : redhat-menus-12.0.2-17.fc32.noarch                                                                                                80/88
+  Obsoleting       : fedora-logos-30.0.2-4.fc32.x86_64                                                                                                 81/88
+  Obsoleting       : desktop-backgrounds-compat-32.0.0-3.fc32.noarch                                                                                   82/88
+
+  warning: file /boot/xen.gz: remove failed: No such file or directory
+  warning: file /boot/xen-4.13.gz: remove failed: No such file or directory
+
+  Running scriptlet: xen-4.13.1-4.fc32.x86_64                                                                                                          83/88
+  Running scriptlet: xen-runtime-4.13.1-4.fc32.x86_64                                                                                                  84/88
+  Running scriptlet: xen-hypervisor-4.13.1-4.fc32.x86_64
+  Running scriptlet: qubes-core-dom0-4.1.14-1.fc32.noarch                                                                                              88/88
+  Running scriptlet: qubes-mgmt-salt-dom0-virtual-machines-4.1.5-1.fc32.noarch                                                                         88/88
+  Running scriptlet: qubes-desktop-linux-manager-4.1.5-1.fc32.noarch                                                                                   88/88
+  Running scriptlet: os-prober-1.77-4.fc32.x86_64
+
+  Errors during downloading metadata for repository 'qubes-dom0-cached':
+    - Curl error (37): Couldn't read a file:// file for file:///var/lib/qubes/updates/repodata/repomd.xml [Couldn't open file /var/lib/qubes/updates/repodata/repomd.xml]
+  Error: Failed to download metadata for repo 'qubes-dom0-cached': Cannot download repomd.xml: Cannot download repodata/repomd.xml: All mirrors were tried
+    Ignoring repositories: qubes-dom0-cached
+
+
+################################################################################
+COMPONENTS:
+  #=============================================================================
+  # HOST
+  #=============================================================================
+  DISABLED SERVICES via 'core-agent-linux/vm-systemd/75-qubes-vm.preset':
+    # linux-utils
+    disabled: qubes-meminfo-writer.service
+
+  HOST:
+    #---------------------------------------------------------------------------
+    core-libvirt:
+      DOM0:
+        requires: No qubes depends
+        - spec disables some features kvm would want
+        #provides:
+        #  libvirt-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-admin-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-bash-completion-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-client-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-config-nwfilter-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-interface-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-libxl-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-nodedev-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-nwfilter-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-secret-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-core-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-disk-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-gluster-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-iscsi-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-logical-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-mpath-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-scsi-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-driver-storage-zfs-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-daemon-xen-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-devel-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-docs-6.4.0-1.fc32.x86_64.rpm
+        #  libvirt-libs-6.4.0-1.fc32.x86_64.rpm
+        #  python3-libvirt-6.4.0-1.fc32.x86_64.rpm
+
+          #### MISSING KVM PACKAGES ############################################
+          libvirt-daemon-config-network
+          libvirt-daemon-driver-network
+          libvirt-daemon-driver-qemu
+          libvirt-daemon-driver-storage-iscsi-direct
+          libvirt-daemon-driver-storage-rbd
+          libvirt-daemon-driver-storage-sheepdog
+          libvirt-daemon-kvm
+          libvirt-gconfig
+          libvirt-glib
+          libvirt-gobject
+
+    #---------------------------------------------------------------------------
+    #core-vchan-xen:
+    #  DOM0:
+    #    qubes-libvchan-xen:
+    #    qubes-libvchan-xen-devel:
+    #      #provides:
+    #      #  qubes-core-vm-devel
+    #      #  qubes-core-libs-devel
+    #      #  qubes-libvchan-devel
+    #  #VM:
+    #  #  qubes-libvchan-xen:
+    #  #  qubes-libvchan-xen-devel:
+    core-vchan-libkvmchan:
+      DOM0:
+      VM:
+    core-vchan-kvm:
+      NOTES:
+        - Remove u2mfn if not required
+      DOM0:
+        qubes-libvchan-xen:
+        qubes-libvchan-xen-devel:
+          #provides:
+          #  qubes-core-vm-devel
+          #  qubes-core-libs-devel
+          #  qubes-libvchan-devel
+      #VM:
+      #  qubes-libvchan-xen:
+      #  qubes-libvchan-xen-devel:
+
+    #---------------------------------------------------------------------------
+    core-qubesdb:
+      DOM0:
+        qubes-db-dom0:
+          #requires: qubes-db
+        qubes-db:
+          requires: qubes-libvchan-@BACKEND_VMM@ (xen)
+        qubes-db-libs:
+        qubes-db-devel:
+          #requires: qubes-db-libs
+        python3-qubesdb:
+          #requires: qubes-db-libs
+      #VM:
+      #  qubes-db-vm:
+      #  qubes-db:
+      #  qubes-db-libs:
+      #  qubes-db-devel:
+      #  python3-qubesdb:
+
+    #---------------------------------------------------------------------------
+    core-qrexec:
+      COMMON:
+        qubes-core-qrexec:
+          #requires:
+          #  python3
+          #  python3-gbulb
+        qubes-core-qrexec-libs:
+        qubes-core-qrexec-devel:
+      DOM0:
+        qubes-core-qrexec-dom0:
+          requires:
+            qubes-core-dom0
+            #qubes-core-qrexec
+            #python3
+            #python3-inotify
+      #VM:
+      #  qubes-core-qrexec-vm:
+      #    #requires:
+      #    #  qubes-core-qrexec
+      #    #  python3
+
+    #---------------------------------------------------------------------------
+    linux-utils:
+      # DISABLED SERVICES via 'core-agent-linux/vm-systemd/75-qubes-vm.preset'
+      #
+      #     disabled: qubes-meminfo-writer.service
+      #
+      NOTES:
+        DISABLED: debian and arch builds until fedora build working!
+      - dracut
+      - grub
+      - imgconverter
+      - initramfs-tools
+      - kernel-modules
+      - qmemman
+      - qrexec-lib
+      - udev
+      DOM0:
+        qubes-utils:
+          #requires:
+          #  qubes-utils-libs
+          #  python3-qubesimgconverter
+          #  udev
+          #  ImageMagick
+        qubes-utils-libs:
+        qubes-utils-devel:
+        python3-qubesimgconverter:
+          #requires:
+          #  python3
+          #  python3-cairo
+          #  python3-pillow
+          #  python3-numpy
+        qubes-kernel-vm-support:
+          #requires: dracut
+      #VM:
+      #  qubes-utils:
+      #  qubes-utils-libs:
+      #  qubes-utils-devel:
+      #  python3-qubesimgconverter:
+      #  qubes-kernel-vm-support:
+
+    #---------------------------------------------------------------------------
+    python-cffi:      # Debian - Foreign Function Interface for Python 3 calling C code
+    python-xcffib:    # VM-DEB: This package is a Python binding for XCB
+    python-quamash:   # DOM0+VM: PEP 3156 event-loop (asyncio) api using the Qt Event-Loop
+    python-qasync:    # DOM0+VM: Implementation of the PEP 3156 Event-Loop with Qt
+    python-objgraph:  # DOM0+VM: Draws Python object reference graphs with graphviz
+    python-hid:       # Debian - Human interface API
+
+    #---------------------------------------------------------------------------
+    core-admin:
+      conf:
+        - qmemman.conf
+        - systemd
+        - qubes-rpc-policy
+        - relaxng grammer
+        - libvirt templates
+      - docs
+      - qubes python api
+      - qubes-rpc
+      DOM0:
+        qubes-core-dom0:
+          requires:
+            qubes-core-dom0-linux
+            python3-qubesdb
+            # policy (daemon) using changed qubesd socket protocol
+            qubes-core-qrexec-dom0
+            qubes-db-dom0
+            %if x%{?backend_vmm} == xxen:
+              xen-runtime
+              xen-hvm
+              xen-hvm-stubdom-linux
+              libvirt-daemon-xen
+            #systemd-units
+            #python3
+            #python3-docutils
+            #python3-jinja2
+            #python3-lxml
+            #python3-setuptools
+            #python3-PyYAML
+            #python3-xen
+            #libvirt-python3
+            #pciutils
+            #cronie
+            #scrypt
+            ## for qubes-hcl-report
+            #dmidecode
+            ## Required for qvm-console* tools
+            #socat
+          #provides:
+          #  qubes-core-dom0-doc
+          #  preupgrade
+      #VM: None
+
+    #---------------------------------------------------------------------------
+    core-admin-client:
+      - qubesadmin
+      DOM0:
+        qubes-core-admin-client:
+          #requires:
+          #  python3-qubesadmin
+          #  python3-yaml
+        python3-qubesadmin:
+          #requires:
+          #  python3-daemon
+          #  python3-docutils
+          #  python3-lxml
+          #  python3-xcffib
+      #VM:
+      #  qubes-core-admin-client:
+      #  python3-qubesadmin:
+
+    #---------------------------------------------------------------------------
+    #core-admin-addon-whonix:
+    #  - qubeswhonix
+    #  - qubes-rpc-policy
+    #  DOM0:
+    #  VM: None
+
+    #---------------------------------------------------------------------------
+    core-admin-linux:
+      - Appmenus
+      - Dom0 updates
+      - Qrexec services
+      - pm-utils
+      - Dracut module
+      - Vaio fixes
+      - Misc config
+      DOM0:
+        qubes-core-dom0-linux:
+          requires:
+            qubes-core-dom0
+            qubes-core-qrexec-dom0
+            qubes-core-admin-client
+            qubes-utils
+            qubes-utils-libs
+            python3-qubesadmin
+            #qubes-core-dom0-linux-kernel-install
+            #xdotool
+            #createrepo_c
+        qubes-core-dom0-linux-kernel-install:
+        qubes-core-dom0-vaio-fixes:
+      #VM: None
+
+    #---------------------------------------------------------------------------
+    DOM0+VM: artwork:
+    DOM0+VM: manager:
+
+  #=============================================================================
+  # TEMPLATE
+  #=============================================================================
+  DISABLED SERVICES via 'core-agent-linux/vm-systemd/75-qubes-vm.preset':
+    # core-agent-linux
+    disabled: qubes-network.service
+    disabled: qubes-firewall.service
+    disabled: qubes-iptables.service
+    disabled: qubes-updates-proxy-forwarder.socket
+    disabled: qubes-updates-proxy.service
+    # gui-agent-linux
+    disabled: qubes-gui-agent.service
+
+  TEMPLATE:
+    #---------------------------------------------------------------------------
+    core-agent-linux:
+
+      agents:
+        - qubes-core-agent-thunar
+        - passwordless-root
+        - networking
+        - network-manager
+        - firewall
+      conf:
+        - app-menu
+        - autostart
+        - boot
+        - fstab
+        - systemd config
+        - sysvinit config
+        - dom0-updates
+        - packages managers
+        - dnf-plugins
+      - qubes-rpc
+      - docs
+      #DOM0: None
+      VM:
+        qubes-core-agent:
+          requires:
+            qubes-utils
+            qubes-utils-libs
+            # for qvm-feature-request
+            python3-qubesdb
+            qubes-core-qrexec-vm
+            qubes-libvchan
+            qubes-db-vm
+            #python3-dnf-plugins-qubes-hooks
+            #xdg-utils
+            #initscripts
+            #gawk
+            #sed
+            #util-linux
+            #e2fsprogs
+            #hostname
+            ## for Qubes Manager VM updater
+            #xterm
+            ## for qubes-desktop-run
+            #python3-gobject-base
+            #python3-dbus
+            ## for qubes-session-autostart, xdg-icon
+            #python3-pyxdg
+            #python3-daemon
+            #ImageMagick
+            #librsvg2-tools
+            #zenity
+            #dconf
+            #python3-setuptools
+            ## for qubes.ResizeDisk
+            #parted
+          #provides:
+          #  qubes-core-vm
+          #  qubes-core-vm-doc
+        python2-dnf-plugins-qubes-hooks:
+        python3-dnf-plugins-qubes-hooks:
+        qubes-core-agent-nautilus:
+          #requires:
+          #  qubes-core-agent
+          #  nautilus-python
+        qubes-core-agent-dom0-updates:
+          #requires:
+          #  qubes-core-agent
+          #  fakeroot
+          #  tar
+        qubes-core-agent-networking:
+          #requires:
+          #  qubes-core-agent
+          #  ethtool
+          #  iptables
+          #  net-tools
+          #  iproute
+          #  nftables
+          #  socat
+          #  tinyproxy
+        qubes-core-agent-network-manager:
+          #requires:
+          #  qubes-core-agent-networking
+          #  NetworkManager
+          #  glib2
+          #  polkit
+        qubes-core-agent-passwordless-root:
+        qubes-core-agent-thunar:
+          #requires: Thunar
+        qubes-core-agent-sysvinit:
+          requires:
+            qubes-core-qrexec-vm
+            #qubes-core-agent
+            #qubes-core-agent-networking
+            #upstart
+          #provides:
+          #  qubes-core-agent-init-scripts
+          #  qubes-core-vm-sysvinit
+        qubes-core-agent-systemd:
+          #requires:
+          #  qubes-core-agent
+          #  systemd
+          #  systemd-units
+          #provides:
+          #  qubes-core-vm-systemd
+          #  qubes-core-agent-init-scripts
+
+    DOM0: app-yubikey
+    DOM0+VM: app-linux-split-gpg
+    VM: app-thunderbird
+    DOM0+VM: app-linux-pdf-converter
+    DOM0+VM: app-linux-img-converter
+    DOM0+VM: app-linux-input-proxy
+    DOM0+VM: app-linux-usb-proxy
+    VM: app-linux-snapd-helper
+    VM: app-shutdown-idle
+    DOM0+VM: python-u2flib-host # Yubikey - Python based U2F host library
+    DOM0+VM: app-u2f
+    linux-template-builder
+
+  #=============================================================================
+  # PYTHON
+  #=============================================================================
+  PYTHON:
+    # ==========================================================================
+    python-cffi      # Debian - Foreign Function Interface for Python 3 calling C code
+    VM-DEB: python-xcffib    # Debian - This package is a Python binding for XCB
+    DOM0+VM: python-quamash   # PEP 3156 event-loop (asyncio) api using the Qt Event-Loop
+    DOM0+VM: python-qasync    # Implementation of the PEP 3156 Event-Loop with Qt
+    DOM0+VM: python-objgraph  # Draws Python object reference graphs with graphviz
+    python-hid       # Debian - Human interface API
+
+  #=============================================================================
+  # DOM0: SALT MANAGEMENT
+  #=============================================================================
+  MGMT:
+    DOM0+VM: mgmt-salt
+    DOM0+VM: mgmt-salt-base
+    DOM0+VM: mgmt-salt-base-topd
+    DOM0+VM: mgmt-salt-base-config
+    DOM0: mgmt-salt-dom0-qvm
+    DOM0: mgmt-salt-dom0-virtual-machines
+    DOM0: mgmt-salt-dom0-update
+
+  #=============================================================================
+  # DOM0: XEN
+  #=============================================================================
+  DOM0:
+    DOM0: vmm-xen
+    DOM0: intel-microcode
+    DOM0: linux-firmware
+    DOM0: linux-kernel
+    DOM0: grub2
+    DOM0: grub2-theme
+    DOM0+VM: gui-common
+    DOM0+VM: gui-daemon
+    DOM0+VM: gui-agent-linux  # pulseaudio, gui
+    gui-agent-xen-hvm-stubdom
+    DOM0: seabios
+    DOM0: vmm-xen-stubdom-legacy
+    DOM0: vmm-xen-stubdom-linux
+    DOM0: infrastructure
+    DOM0+VM: meta-packages
+    DOM0+VM: desktop-linux-common
+    DOM0+VM: desktop-linux-kde
+    DOM0+VM: desktop-linux-xfce4
+    DOM0+VM: desktop-linux-xfce4-xfwm4
+    DOM0+VM: desktop-linux-i3
+    DOM0+VM: desktop-linux-i3-settings-qubes
+    DOM0+VM: desktop-linux-awesome
+    DOM0: desktop-linux-manager
+    VM: grubby-dummy
+    DOM0: linux-pvgrub2
+    DOM0+VM: linux-gbulb
+    DOM0+VM: linux-scrypt
+
+  #=============================================================================
+  # ISO
+  #=============================================================================
+  ISO:
+    installer-qubes-os
+    qubes-release
+    pykickstart
+    blivet
+    lorax
+    lorax-templates
+    pungi
+    anaconda
+    anaconda-addon
+    linux-yum
+    linux-deb
+    tpm-extra
+    trousers-changer
+    antievilmaid
+
+  #=============================================================================
+  # BUILD
+  #=============================================================================
+  BUILD:
+    builder
+    builder-debian
+    builder-rpm
