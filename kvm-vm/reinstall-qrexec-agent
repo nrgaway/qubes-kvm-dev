@@ -1,0 +1,32 @@
+#!/bin/sh
+# vim: ft=sh ts=4 sw=4 expandtab:
+
+source /share/bin/packages.sh
+
+#DEBUG=true
+#DRYRUN=true
+
+qrexec_agent=(
+    ##qubes-core-qrexec-4.1.8-1.fc32.x86_64.rpm
+    ##qubes-core-qrexec-vm-4.1.8-1.fc32.x86_64.rpm
+    ##qubes-core-qrexec-libs-4.1.8-1.fc32.x86_64.rpm
+    ##qubes-libvchan-kvm-4.1.0-1.fc32.x86_64.rpm
+    ##python3-gbulb-0.6.1-1.fc32.x86_64.rpm
+    qubes-core-qrexec
+    qubes-core-qrexec-vm
+    qubes-core-qrexec-libs
+    qubes-libvchan-kvm
+    python3-gbulb
+)
+
+if (( INSTALL_PACKAGES )); then
+    install_packages "${qrexec_agent[@]}"
+
+    sudo cp -f "$CONFDIR"/lib_systemd_system/qubes-qrexec-agent.service /lib/systemd/system
+    sudo systemctl daemon-reload
+    sudo systemctl enable qubes-qrexec-agent.service
+
+else
+    add_packages "${qrexec_agent[@]}"
+fi
+

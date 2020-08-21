@@ -1,0 +1,34 @@
+#!/bin/sh
+# vim: ft=sh ts=4 sw=4 expandtab:
+
+source /share/bin/packages.sh
+
+#DEBUG=true
+#DRYRUN=true
+
+kvmchand=(
+    ##libkvmchan-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-vm-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-libs-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-libs-debuginfo-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-debuginfo-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-debugsource-4.1.0-1.fc32.x86_64.rpm
+    ##libkvmchan-devel-4.1.0-1.fc32.x86_64.rpm
+    libkvmchan-vm
+    libkvmchan
+    libkvmchan-libs
+)
+
+if (( INSTALL_PACKAGES )); then
+    install_packages "${kvmchand[@]}"
+
+    sudo cp -f "$CONFDIR"/lib_systemd_system/kvmchand.service /lib/systemd/system
+    sudo systemctl daemon-reload
+    sudo systemctl enable kvmchand.service
+
+else
+    add_packages "${kvmchand[@]}"
+fi
+
+fi
+
