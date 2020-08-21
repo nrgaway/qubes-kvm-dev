@@ -1,0 +1,145 @@
+
+################################################################################
+BUILD:
+  Build Errors:
+    - Seems like building with 32 cores breaks compiling libvirt since some
+      sections compile too fast resulting in a `FileNotFound` error.  In this
+      case copy '~/.rpmmacros' to 'chroot-dom0-fc32/home/user'.
+
+  Makefile:
+    ifeq ($(BACKEND_VMM),xen)
+    endif
+
+  Spec:
+    %define backend_vmm @BACKEND_VMM@
+    %if x%{?backend_vmm} == xxen
+    %endif
+
+  Components:
+    WIP: REBUILD
+      NOTES:
+        core-vchan-libkvmchan:
+          - install packages changed. Added -libs, -host and -vm packages
+
+    # kvm: startup.sh: Only run xen specific code if hypervisor is xen
+    # kvm: Add hypervisor.sh for xen/kvm detection
+
+    ############################################################################
+
+    kvm (master):
+    vmm-xen (xen-4.13):
+      - XXX-FIX:  Some package still have depends on xen.  Build once then
+        comment out
+
+    core-libvirt (kvm}:
+    core-libvirt (kvm}:
+    core-vchan-libkvmchan (master):
+
+    core-vchan-kvm (master):
+
+    core-qubesdb (kvm}:
+      - XXX-FIX:
+        daemon/db-daemon.c:
+          - Hardcoded 'daemon/db-daemon.c' to use 'libvchan_client_init' instead
+            instead of hardcoded 'VchanInitServer'
+
+    core-qrexec (kvm}:
+      - XXX-FIX:
+        daemon/qrexec-daemon.c: |
+          - Staticly changed startup timeout to 120 seconds for testing.  May
+            not be required.
+          - Attempt to reconnect for upto 180 seconds (staticly set) since
+            libkvmchan currenly returns if guest has not yet connected.
+
+
+    linux-utils (kvm}:
+      # Makefile.builder has debian+arch commented out
+      - XXX-FIX:
+        templates/libvirt/kvm.xml:
+          - WIP
+
+    #python-cffi (master):
+    #python-xcffib (master):
+    #python-quamash (master):
+    #python-objgraph (master):
+    #python-hid (master):
+    #python-u2flib-host (master):
+    #python-qasync (master):
+    core-admin (kvm}:
+
+    #core-admin-client (master):
+    #core-admin-addon-whonix (master):
+    #core-admin-linux (master):
+    core-agent-linux (kvm}:
+      debian/control: has python-nautilus hack
+
+    linux-kernel (vfio_noiommu):
+    #artwork (master):
+    #grub2 (master):
+    #grub2-theme (master):
+    gui-common (master):
+      # TODO: Add temp dropins to disable serive or disable qubes feature
+
+    gui-daemon (master):
+      # TODO: Add temp dropins to disable serive or disable qubes feature
+
+    gui-agent-linux (master):
+      # TODO: Add temp dropins to disable serive or disable qubes feature
+
+    #app-linux-split-gpg (master):
+    #app-thunderbird (master):
+    #app-linux-pdf-converter (master):
+    #app-linux-img-converter (master):
+    app-linux-input-proxy (master):
+      # TODO: Add temp dropins to disable serive or disable qubes feature
+
+    #app-linux-usb-proxy (master):
+    #app-linux-snapd-helper (master):
+    #app-shutdown-idle (master):
+    #app-yubikey (master):
+    #app-u2f (master):
+    #mgmt-salt (master):
+    #mgmt-salt-base (master):
+    #mgmt-salt-base-topd (master):
+    #mgmt-salt-base-config (master):
+    #mgmt-salt-dom0-qvm (master):
+    #mgmt-salt-dom0-virtual-machines (master):
+    #mgmt-salt-dom0-update (master):
+    #infrastructure (master):
+    #meta-packages (master):
+    #manager (master):
+    #desktop-linux-common (master):
+    #desktop-linux-kde (master):
+    #desktop-linux-xfce4 (master):
+    #desktop-linux-xfce4-xfwm4 (master):
+    #desktop-linux-i3 (master):
+    #desktop-linux-i3-settings-qubes (master):
+    #desktop-linux-awesome (master):
+    #desktop-linux-manager (master):
+    #grubby-dummy (master):
+    #linux-pvgrub2 (master):
+    #linux-gbulb (master):
+    #linux-scrypt (master):
+    #linux-template-builder (master):
+
+    #### INSTALLER
+    #installer-qubes-os (master):
+    #qubes-release (master):
+    #pykickstart (master):
+    #blivet (master):
+    #lorax (master):
+    #lorax-templates (master):
+    #pungi (master):
+    #anaconda (master):
+    #anaconda-addon (master):
+    #linux-yum (master):
+    #linux-deb (master):
+    #tpm-extra (master):
+    #trousers-changer (master):
+    #antievilmaid (master):
+
+    #### BUILDERS
+    builder (nrgaway):
+    builder-debian (master):
+    #builder-rpm (master):
+    kvm-dev (nrgaway):
