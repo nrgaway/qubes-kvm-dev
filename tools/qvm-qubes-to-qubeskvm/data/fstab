@@ -1,0 +1,40 @@
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+
+#### TEMP:  Select /dev/vda3 as root mountpoint until dmroot device is added
+##/dev/mapper/dmroot /                   ext4    defaults,discard,noatime 1 1
+/dev/vda3            /                   ext4    defaults,discard,noatime 1 1
+
+/dev/vda2            /boot               ext4    defaults 1 2
+/dev/vda1            /boot/efi           vfat    umask=0077,shortname=winnt 0 2
+
+#### TEMP:  Remove noauto option until qubes binddirs enabled
+##/dev/vdb           /rw                 auto    noauto,defaults,discard,nosuid,nodev 1 2
+/dev/vdb             /rw                 auto    defaults,discard,nosuid,nodev 1 2
+
+#### TODO:  Re-enable swap
+#### TODO:  Encrypt swap
+#/dev/vdc1           swap                swap    defaults 0 0
+
+devpts               /dev/pts            devpts  gid=5,mode=620 0 0
+proc                 /proc               proc    defaults 0 0
+sysfs                /sys                sysfs   defaults 0 0
+
+#### TODO:  Ensure enough memory is reserved
+tmpfs                /dev/shm            tmpfs   defaults,size=1G 0 0
+
+#### DISABLED xen mount
+##xen                /proc/xen           xenfs   defaults 0 0
+
+#### TEMP:  Remove noauto option until qubes binddirs enabled
+##/rw/home           /home               none    noauto,bind,defaults,nosuid,nodev 0 0
+##/rw/usrlocal       /usr/local          none    noauto,bind,defaults 0 0
+/rw/home             /home               none    bind,defaults,nosuid,nodev 0 0
+/rw/usrlocal         /usr/local          none    bind,defaults 0 0
+
+/dev/vdi             /mnt/removable      auto    noauto,user,rw 0 0
+
+#### XXX:  TEMP:  For development
+/rpm /rpm 9p  trans=virtio,version=9p2000.L,rw 0 0
+/share /share 9p  trans=virtio,version=9p2000.L,rw 0 0

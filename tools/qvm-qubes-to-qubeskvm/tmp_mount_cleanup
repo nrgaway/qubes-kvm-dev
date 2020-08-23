@@ -1,0 +1,22 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+# XXX:
+#   Temp cleanup to run during development to ensure all mounts are un-mounted
+#   and loop devices detached.
+
+sudo -E ./lib/umount_kill.sh mnt || true
+sudo -E ./lib/umount_kill.sh mnt-source || true
+sudo -E losetup -d /dev/loop0 || true
+sudo -E losetup -d /dev/loop1 || true
+sudo -E losetup -d /dev/loop2 || true
+sudo -E losetup -d /dev/loop3 || true
+sudo -E losetup -d /dev/loop4 || true
+sudo -E losetup -d /dev/loop5 || true
+sudo -E losetup -d /dev/loop6 || true
+
+if [ ! -z $1 ]; then
+    sudo -E rm -f "${1}.img"
+    sudo -E rm -f "${1}-private.img"
+fi
+
