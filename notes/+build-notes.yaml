@@ -1,3 +1,12 @@
+# Notes related to building Qubes components
+
+DEBUG:
+  core dump/stack trace:
+    # https://wiki.archlinux.org/index.php/Core_dump
+    # https://wiki.archlinux.org/index.php/Debug_-_Getting_Traces
+   coredumpctl info /usr/sbin/kvmchand
+   coredumpctl gdb /usr/sbin/kvmchand
+    >>> bt
 
 ################################################################################
 BUILD:
@@ -25,13 +34,11 @@ BUILD:
     # kvm: Add hypervisor.sh for xen/kvm detection
 
     ############################################################################
-
     kvm (master):
     vmm-xen (xen-4.13):
       - XXX-FIX:  Some package still have depends on xen.  Build once then
         comment out
 
-    core-libvirt (kvm}:
     core-libvirt (kvm}:
     core-vchan-libkvmchan (master):
 
