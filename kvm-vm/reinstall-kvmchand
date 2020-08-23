@@ -30,5 +30,3 @@ else
     add_packages "${kvmchand[@]}"
 fi
 
-fi
-
