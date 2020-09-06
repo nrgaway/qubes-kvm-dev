@@ -1,0 +1,18 @@
+#!/bin/sh
+# vim: ft=sh ts=4 sw=4 expandtab:
+
+SCRIPTDIR="$(dirname "$(readlink -m "${BASH_SOURCE[0]}")")"
+source "${SCRIPTDIR}/install-vm-packages.sh"
+
+#DEBUG=true
+#DRYRUN=true
+#DEBUGINFO=true
+
+COMPONENTS=( 'core-qrexec' )
+#INSTALL_MODES=('reinstall')
+
+install_packages "$RPMDIR" COMPONENTS "${@}"
+
+#sudo cp -f "$CONFDIR"/lib_systemd_system/qubes-qrexec-agent.service /lib/systemd/system
+#sudo systemctl daemon-reload
+#sudo systemctl enable qubes-qrexec-agent.service
