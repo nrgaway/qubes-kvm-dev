@@ -1,0 +1,16 @@
+[Unit]
+Description=Qubes test unit file
+DefaultDependencies=no
+After=systemd-modules-load.service fedora-loadmodules.service
+After=qubes-hypervisor.service
+Requires=qubes-hypervisor.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/qubes/test-xen.sh
+RemainAfterExit=yes
+StandardOutput=syslog
+
+[Install]
+WantedBy=sysinit.target
+

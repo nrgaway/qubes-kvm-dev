@@ -1,0 +1,7 @@
+#[Unit]
+#SourcePath=/lib/systemd/system/qubes-test.service.d/30_qubes-kvm.conf.in
+
+[Service]
+ExecStart=
+ExecStart=/usr/lib/qubes/test-kvm.sh
+

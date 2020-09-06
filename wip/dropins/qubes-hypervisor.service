@@ -1,0 +1,17 @@
+[Unit]
+Description=" +++ Qubes hypervisor detection ++++++++++++++++++++++++++++++++++"
+DefaultDependencies=no
+After=systemd-modules-load.service fedora-loadmodules.service
+
+[Service]
+Type=notify
+ExecStart=/usr/lib/qubes/test-hypervisor.sh
+##KillMode=process
+#RemainAfterExit=yes
+StandardOutput=syslog
+
+## MAY NOT BE REQUIRED
+NotifyAccess=all
+
+[Install]
+WantedBy=sysinit.target
