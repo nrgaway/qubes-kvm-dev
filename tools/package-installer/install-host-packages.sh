@@ -3,10 +3,11 @@
 
 SCRIPTDIR="$(dirname "$(readlink -m "${BASH_SOURCE[0]}")")"
 source "${SCRIPTDIR}/package-installer.sh"
-source "${SCRIPTDIR}/services-stop.sh"
-source "${SCRIPTDIR}/services-restart.sh"
+source "${SCRIPTDIR}/host-services-stop.sh"
+source "${SCRIPTDIR}/host-services-restart.sh"
 
-RPMDIR="qubes-packages-mirror-repo/dom0-fc32/rpm"
+##RPMDIR="qubes-packages-mirror-repo/dom0-fc32/rpm"
+RPMDIR="${RPMDIR:-"qubes-packages-mirror-repo/dom0-fc32/rpm"}"
 
 #DEBUG=true
 #DRYRUN=true

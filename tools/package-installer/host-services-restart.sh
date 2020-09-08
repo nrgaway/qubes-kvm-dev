@@ -1,8 +1,8 @@
 #!/bin/bash
 
 SCRIPTDIR="$(dirname "$(readlink -m "${BASH_SOURCE[0]}")")"
-source "${SCRIPTDIR}/services-stop.sh"
-source "${SCRIPTDIR}/services-status.sh"
+source "${SCRIPTDIR}/host-services-stop.sh"
+source "${SCRIPTDIR}/host-services-status.sh"
 
 
 services_restart() {

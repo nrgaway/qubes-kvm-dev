@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 services_stop() {
     # Stop all Qubes related running serivces
     sudo systemctl stop kvmchand-host.service

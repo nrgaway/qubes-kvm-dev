@@ -4,7 +4,7 @@
 SCRIPTDIR="$(dirname "$(readlink -m "${BASH_SOURCE[0]}")")"
 source "${SCRIPTDIR}/package-installer.sh"
 
-RPMDIR="/rpm"
+RPMDIR="${RPMDIR:-"/rpm"}"
 CONFDIR="/share"
 
 #DEBUG=true
@@ -79,7 +79,7 @@ COMPONENTS=(
 kvm=(
     qubes-kvm-vm                            # REQUIRED
     qubes-kvm-vm-config                     # REQUIRED
-    qubes-kvm-vm-guivm
+#   qubes-kvm-vm-guivm
     #qubes-kvm-vm-dependencies
     #qubes-kvm-vm-recommended
 )

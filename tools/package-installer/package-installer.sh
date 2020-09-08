@@ -60,7 +60,7 @@ dnf_install() {
             fi
         done
     else
-        sudo dnf "$mode" "${packages[@]}"
+        sudo dnf -y "$mode" "${packages[@]}"
     fi
 }
 
