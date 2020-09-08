@@ -1,0 +1,143 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+declare -ir false=0 true=1
+
+
+remove_softlinks () {
+    local rootdir="$1"
+    local path paths
+
+    pushd "${rootdir}" >/dev/null 2>&1
+        readarray -t paths < <(ls -1)
+        for path in "${paths[@]}"; do
+            if [ -L "$path" ]; then
+                rm "$path"
+            fi
+        done
+    popd >/dev/null 2>&1
+}
+
+
+link_kvm_mods () {
+    local rootdir="$1"
+    local targetdir="$2"
+    local remove=${3:-true}
+    local path paths
+    local source target
+
+    targetdir="$(readlink -m "$targetdir")"
+    mkdir -p "$targetdir"
+
+    echo "  ROOTDIR: $rootdir"
+    echo "TARGETDIR: $targetdir"
+
+    if (( remove )); then
+        remove_softlinks "$targetdir"
+    fi
+
+    pushd "${rootdir}" >/dev/null 2>&1
+
+        readarray -t paths < <(grep -rIlos --max-count=1 -E '#\s*KVM:')
+
+        for path in "${paths[@]}"; do
+            echo ""
+            echo "     PATH: $path"
+
+            target="${path//\//.}"
+            source="$(readlink -m "$path")"
+            echo "   SOURCE: $source"
+            echo "   TARGET: $target"
+
+            pushd "${targetdir}" >/dev/null 2>&1
+                ln -s "$source" "$target"
+            popd >/dev/null 2>&1
+        done
+
+    popd >/dev/null 2>&1
+}
+
+
+link_systemd () {
+    local rootdir="$1"
+    local targetdir="$2"
+    local include_service_units=${3:-true}
+    shift 3 || shift $(($#))
+    local pattern patterns path paths
+    local source target
+    local parent service_unit unit_source unit_target
+
+    if (( "$#" )); then
+        patterns=("$@")
+    else
+        patterns=("qubes-kvm")
+    fi
+
+    targetdir="$(readlink -m "$targetdir")"
+    mkdir -p "$targetdir"
+
+    echo "    PATTERNS: "${patterns[@]}""
+    echo "SERVICE_UNIT: $include_service_units"
+    echo "     ROOTDIR: $rootdir"
+    echo "   TARGETDIR: $targetdir"
+    echo "        PATH: $path"
+
+    remove_softlinks "$targetdir"
+
+    for pattern in "${patterns[@]}"; do
+        pushd "${rootdir}" >/dev/null 2>&1
+
+            ##readarray -t paths < <(find . -type f | grep 'qubes-kvm')
+            readarray -t paths < <(find . -type f | grep "$pattern")
+
+            for path in "${paths[@]}"; do
+                echo ""
+                echo "     PATTERN: $pattern"
+                echo "        PATH: $path"
+
+                target="${path#./*}"
+                target="${target//\//.}"
+                source="$(readlink -m "$path")"
+                echo "      SOURCE: $source"
+                echo "      TARGET: $target"
+
+                if (( include_service_units )); then
+                    parent="$(dirname "$path")"
+                    service_unit="${parent%*.d}"
+                    service_unit="${service_unit%*.in}"
+                    echo "      PARENT: $parent"
+                    echo "SERVICE_UNIT: $service_unit"
+
+                    unit_source="$(readlink -m "$service_unit")"
+                    unit_target="${service_unit#./*}"
+                    echo " UNIT_SOURCE: $unit_source"
+                    echo " UNIT_TARGET: $unit_target"
+                fi
+
+                pushd "${targetdir}" >/dev/null 2>&1
+                    echo ln -s "$source" "$target"
+                    ln -s "$source" "$target"
+
+                    if (( include_service_units )); then
+                        if [ -e "${rootdir}/${service_unit}" ]; then
+                            if [ -f "$unit_source" ]; then
+                                echo ln -s "$unit_source" "$unit_target"
+                                ln -s "$unit_source" "$unit_target"
+                            fi
+                        fi
+                    fi
+                popd >/dev/null 2>&1
+            done
+
+        popd >/dev/null 2>&1
+    done
+}
+
+link_systemd "/lib/systemd/system" "qubes-systemd-kvm" true "qubes-kvm" "kvmchand"
+link_systemd "/lib/systemd/system" "qubes-systemd" true "qubes"
+link_kvm_mods "/lib/systemd/system" "qubes-systemd-kvm" false
+link_kvm_mods "/usr/lib/qubes" "qubes-lib"
+
+exit 0
+
+
