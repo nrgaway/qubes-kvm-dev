@@ -1,0 +1,69 @@
+<!-- vim: set ft=yaml ts=4 sts=4 sw=4 et tw=80 : -->
+
+CONTROLLERS:
+    Q35 CONTROLLER CONFIG (bus):
+        DEFAULT CONTROLLERS:
+        :                    '00:00.0' # Host bridge: Intel Corporation 82G33/G31/P35/P31 Express DRAM Controller
+        :                    '00:01.0' # VGA compatible controller: Device 1234:1111 (rev 02)
+        :                    '00:02.0' # Ethernet controller: Intel Corporation 82540EM Gigabit Ethernet Controller (rev 03)
+        :                    '00:1f.0' # ISA bridge: Intel Corporation 82801IB (ICH9) LPC Interface Controller (rev 02)
+        :                    '00:1f.2' # SATA controller: Intel Corporation 82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode] (rev 02)
+        :                    '00:1f.3' # SMBus: Intel Corporation 82801I (ICH9 Family) SMBus Controller (rev 02)
+
+        GUEST CONTROLLERS:
+            pcie.0:          '00:00.0' # Host bridge: Intel Corporation 82G33/G31/P35/P31 Express DRAM Controller
+            video0:          '00:01.0' # VGA compatible controller: Red Hat, Inc. QXL paravirtual graphic card (rev 04)
+            pci.1:           '00:02.0' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.3:           '00:03.0' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.4:           '00:03.1' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.5:           '00:03.2' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.6:           '00:03.3' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.7:           '00:03.4' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.8:           '00:03.5' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.9:           '00:03.6' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            pci.10:          '00:03.7' # PCI bridge: Red Hat, Inc. QEMU PCIe Root port
+            sound0:          '00:1b.0' # Audio device: Intel Corporation 82801I (ICH9 Family) HD Audio Controller (rev 03)
+            XXXXX:           '00:1f.0' # ISA bridge: Intel Corporation 82801IB (ICH9) LPC Interface Controller (rev 02)
+            XXXXX:           '00:1f.2' # SATA controller: Intel Corporation 82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode] (rev 02)
+            XXXXX:           '00:1f.3' # SMBus: Intel Corporation 82801I (ICH9 Family) SMBus Controller (rev 02)
+
+            pci.2:           '01:00.0' # PCI bridge: Red Hat, Inc. Device 000e
+        3   virtio-disk0:    '04:00.0' # SCSI storage controller: Red Hat, Inc. Virtio block device (rev 01)
+        4   serial0:         '06:00.0' # Communication controller: Red Hat, Inc. Virtio console (rev 01)
+        5   rng0:            '07:00.0' # Unclassified device [00ff]: Red Hat, Inc. Virtio RNG (rev 01)
+        6   net0:            '03:00.0' # Ethernet controller: Red Hat, Inc. Virtio network device (rev 01)
+        7   usb:             '05:00.0' # USB controller: Red Hat, Inc. QEMU XHCI Host Controller (rev 01)
+            baloon0:         '08:00.0' # Unclassified device [00ff]: Red Hat, Inc. Virtio memory balloon (rev 01)
+            fs0:             '09:00.0' # Unclassified device [0002]: Red Hat, Inc. Virtio filesystem (rev 01)
+
+    I440FX CONTROLLER CONFIG (bus/slot):
+        DEFAULT CONTROLLERS:
+        :                    '00:00.0' # Host bridge: Intel Corporation 440FX - 82441FX PMC [Natoma] (rev 02)
+        :                    '00:01.0' # ISA bridge: Intel Corporation 82371SB PIIX3 ISA [Natoma/Triton II]
+        :                    '00:01.1' # IDE interface: Intel Corporation 82371SB PIIX3 IDE [Natoma/Triton II]
+        :                    '00:01.3' # Bridge: Intel Corporation 82371AB/EB/MB PIIX4 ACPI (rev 03)
+        :                    '00:01.0' # VGA compatible controller: Device 1234:1111 (rev 02)
+        :                    '00:03.0' # Ethernet controller: Intel Corporation 82540EM Gigabit Ethernet Controller (rev 03)
+
+        GUEST CONTROLLERS:
+            pci.0:           '00:00.0' # Host bridge: Intel Corporation 440FX - 82441FX PMC [Natoma] (rev 02)
+            :                '00:01.0' # ISA bridge: Intel Corporation 82371SB PIIX3 ISA [Natoma/Triton II]
+            :                '00:01.1' # IDE interface: Intel Corporation 82371SB PIIX3 IDE [Natoma/Triton II]
+            :                '00:01.3' # Bridge: Intel Corporation 82371AB/EB/MB PIIX4 ACPI (rev 03)
+        2   pci.1:           '00:02.0' # PCI bridge: Red Hat, Inc. QEMU PCI-PCI bridge
+        3   pci.2:           '00:03.0' # PCI bridge: Red Hat, Inc. QEMU PCI-PCI bridge
+
+        4   serial0:         '00:04.0' # Communication controller: Red Hat, Inc. Virtio console
+        5   usb:             '00:05.0' # USB controller: Red Hat, Inc. QEMU XHCI Host Controller (rev 01)
+        6   rng0:            '00:06.0' # Unclassified device [00ff]: Red Hat, Inc. Virtio RNG
+        7   video0:          '00:07.0' # VGA compatible controller: Red Hat, Inc. QXL paravirtual graphic card (rev 04)
+        8   sound0:          '00:08.0' # Audio device: Intel Corporation 82801I (ICH9 Family) HD Audio Controller (rev 03)
+
+        9   net0:            '00:09.0' # Ethernet controller: Red Hat, Inc. Virtio network device
+        a   baloon0:         '00:0a.0' # Unclassified device [00ff]: Red Hat, Inc. Virtio memory balloon
+
+        b   sata0:           '00:0b.0' # SATA controller: Intel Corporation 82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode] (rev 02)
+        c   fs0:             '00:0c.0' # Unclassified device [0002]: Red Hat, Inc. Virtio filesystem
+        d   fs1:             '00:0d.0' # Unclassified device [0002]: Red Hat, Inc. Virtio filesystem
+            virtio-disk0:    '00:0e.0' # SCSI storage controller: Red Hat, Inc. Virtio block device
+            :                '02:01.0' # RAM memory: Red Hat, Inc. Inter-VM shared memory (rev 01)
