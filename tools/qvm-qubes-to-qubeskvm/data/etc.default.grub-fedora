@@ -1,0 +1,73 @@
+GRUB_TIMEOUT=0
+GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
+GRUB_DEFAULT=saved
+GRUB_TERMINAL_OUTPUT="console"
+#GRUB_DEFAULT="Advanced options for Fedora 32 (Thirty Two)>Fedora (5.7.10-1.qubes.x86_64) 32 (Thirty Two)"
+
+GRUB_DISABLE_SUBMENU=true
+GRUB_DISABLE_RECOVERY="true"
+
+# ------------------------------------------------------------------------------
+# GRUB_DISABLE_LINUX_UUID:
+# GRUB_DISABLE_LINUX_PARTUUID:
+#   If no initrd is detected or ‘GRUB_DISABLE_LINUX_UUID’ is set to ‘true’ then
+#   grub-command will identify the root filesystem by setting the kernel
+#   command-line variable ‘root’ to ‘root=PARTUUID=...’ unless
+#   ‘GRUB_DISABLE_LINUX_PARTUUID’ is also set to ‘true’. If
+#   ‘GRUB_DISABLE_LINUX_PARTUUID’ is also set to ‘true’, grub-command will
+#   identify by its Linux device name.
+#
+#   Keep enabled or device name will be used which ends up being /dev/loop0p3
+#   within a chroot environment.
+##GRUB_DISABLE_LINUX_UUID=true
+
+# ------------------------------------------------------------------------------
+# GRUB_DISABLE_OS_PROBER:
+#   Normally, grub-mkconfig will try to use the external os-prober program, if
+#   installed, to discover other operating systems installed on the same system
+#   and generate appropriate menu entries for them. Set this option to ‘true’ to
+#   disable this.
+#
+#   Keep disabled when running in a chroo environment to prevent host devices
+#   from being detected.
+GRUB_DISABLE_OS_PROBER=true
+
+
+#### XXX: RE-DISABLE TEST:
+#GRUB_ENABLE_BLSCFG=true
+GRUB_ENABLE_BLSCFG=false
+########
+
+GRUB_CMDLINE_LINUX=""
+##GRUB_CMDLINE_LINUX="resume=UUID=63b31453-7a54-4225-95b1-e82518ff2e8e rhgb quiet"
+
+# --- QUBES OPTIONS ------------------------------------------------------------
+#GRUB_CMDLINE_LINUX+=" root=/dev/mapper/dmroot"
+#GRUB_CMDLINE_LINUX+=" swiotlb=8192"
+#GRUB_CMDLINE_LINUX+=" noresume"
+
+# --- OTHER OPTIONS ------------------------------------------------------------
+#### XXX: RE-ENABLE
+GRUB_CMDLINE_LINUX+=" root=/dev/vda3"
+########
+GRUB_CMDLINE_LINUX+=" audit=0"
+#GRUB_CMDLINE_LINUX+=" rd.driver.pre=vfio-pci"
+GRUB_CMDLINE_LINUX+=" console=ttyS0"
+GRUB_CMDLINE_LINUX+=" selinux=0"
+
+#### ISSUES:
+#
+# 01: /boot/vmlinuz-5.7.14-200.fc32.x86_64' not found
+#     SOLVED EITHER WITH GRUB_DISABLE_LINIX_UUID=true OR GRUB_ENABLE_BLSCFG=false
+#
+# 02: root=/dev/loop2p3
+#     SOLVED by not setting GRUB_DISABLE_LINUX_UUID
+#
+# 03: Stuck in boot
+#     SOLVED by adding root=/dev/vda3 here and within fstab (FIX to use dmroot)
+#       Locks up in boot when setting to 'dmroot' even with UUID enabled AND
+#       fstab set to mount with /dev/vda3.
+#
+# 04: error: ../../grub-core/fs/fshelp.c:257:file `/EFI/fedora/grubenv' not found.
+########
+

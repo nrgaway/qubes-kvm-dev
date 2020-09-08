@@ -24,7 +24,7 @@ export TEMPLATE_ROOT_WITH_PARTITIONS=1
 
 #### XXX:  TEMP:
 if (( clean )); then
-    ./tmp_mount_cleanup "$TEMPLATE_NAME"
+    ./mount_cleanup "$TEMPLATE_NAME"
 fi
 ########
 

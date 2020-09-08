@@ -1,0 +1,12 @@
+let g:netrw_dirhistmax  =10
+let g:netrw_dirhistcnt =1
+let g:netrw_dirhist_1='/usr/lib/systemd/system-generators'
+let g:netrw_dirhist_0='/usr/lib/qubes/init'
+let g:netrw_dirhist_9='/root/bin'
+let g:netrw_dirhist_8='/usr/lib/systemd/system/NetworkManager-wait-online.service.d'
+let g:netrw_dirhist_7='/usr/lib/systemd/system/ModemManager.service.d'
+let g:netrw_dirhist_6='/home/user/tests'
+let g:netrw_dirhist_5='/home/user/.cache/gnome-control-center/wacom'
+let g:netrw_dirhist_4='/home/user/Downloads/READYNAS/data/._share/photos'
+let g:netrw_dirhist_3='/usr/share/vim/vim81/syntax'
+let g:netrw_dirhist_2='/home/user/.vim/plugged'

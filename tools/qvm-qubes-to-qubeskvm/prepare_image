@@ -263,15 +263,22 @@ TARGET_PRIVATE_DEV="$(get_image_loop "$TARGET_PRIVATE_IMG")"
 export TARGET_PRIVATE_DEV
 
 info "Mounting private filesystem..."
-mount_partition "private" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw" || {
+##mount_partition "private" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw" || {
+##    info "Creating private filesystem..."
+##    private_dev="$(get_partition_by_type $TARGET_PRIVATE_DEV "private")"
+##    private_uuid="$(get_uuid $SOURCE_PRIVATE_DEV private UUID)" \
+##    || private_uuid="$(get_uuid $TARGET_PRIVATE_DEV private UUID)"
+##    /sbin/mkfs.ext4 -q -F -U "$private_uuid" "${private_dev}"
+##    mount_partition "root" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw"
+##}
+mount_partition "private" "$TARGET_PRIVATE_DEV" "${PRIVATEDIR}" || {
     info "Creating private filesystem..."
     private_dev="$(get_partition_by_type $TARGET_PRIVATE_DEV "private")"
     private_uuid="$(get_uuid $SOURCE_PRIVATE_DEV private UUID)" \
     || private_uuid="$(get_uuid $TARGET_PRIVATE_DEV private UUID)"
     /sbin/mkfs.ext4 -q -F -U "$private_uuid" "${private_dev}"
-    mount_partition "root" "$TARGET_PRIVATE_DEV" "${INSTALLDIR}/rw"
+    mount_partition "root" "$TARGET_PRIVATE_DEV" "${PRIVATEDIR}"
 }
-
 
 # ==============================================================================
 # Clone source partitions

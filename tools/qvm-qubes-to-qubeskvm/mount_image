@@ -166,13 +166,15 @@ if [ "$MODE" == "mount" ]; then
         }
     } || true
 
+    # Bind mount private dirs
+    mount --bind "${INSTALLDIR}/private" "${INSTALLDIR}/root/rw"
+    mount --bind "${INSTALLDIR}/root/rw/home" "${INSTALLDIR}/root/home"
+    mount --bind "${INSTALLDIR}/root/rw/usrlocal" "${INSTALLDIR}/root/usr/local"
+
     # --- INTERNAL MOUNTS ------------------------------------------------------
     mount -t proc proc "${INSTALLDIR}/root/proc"
     chroot "${INSTALLDIR}/root" mount -t sysfs sys /sys
     chroot "${INSTALLDIR}/root" mount -t devtmpfs none /dev
-    ##chroot "${INSTALLDIR}/root" grub2-mkconfig -o /etc/grub2.cfg || RETCODE=1
-    ##chroot "${INSTALLDIR}/root" grub2-mkconfig -o /etc/grub2-efi.cfg || RETCODE=1
-    ##chroot "${INSTALLDIR}/root" umount /dev /sys /proc
 fi
 
 
@@ -181,6 +183,5 @@ fi
 # ==============================================================================
 if [ "$MODE" == "umount" ]; then
     cleaner
-    ##mount_image_cleanup
 fi
 

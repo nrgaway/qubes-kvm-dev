@@ -1,0 +1,24 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+##declare -ir false=0 true=1
+
+export DIST="fc32"
+source config.sh
+
+CHROOT=true
+
+TEMPLATE_NAME='fc32'
+TEMPLATE_DIR=/var/lib/qubes/vm-templates
+ROOT_IMAGE="${TEMPLATE_DIR}/${TEMPLATE_NAME}/root.img"
+PRIVATE_IMAGE="${TEMPLATE_DIR}/${TEMPLATE_NAME}/private.img"
+
+if (( CHROOT )); then
+
+    sudo -E ./mount_image mount "$ROOT_IMAGE" "$PRIVATE_IMAGE" || exit 1
+    echo "Entering chroot.  Type exit when done"
+    sudo -E chroot "mnt/root"
+    sudo -E ./mount_image umount "$ROOT_IMAGE" "$PRIVATE_IMAGE"
+
+fi
+

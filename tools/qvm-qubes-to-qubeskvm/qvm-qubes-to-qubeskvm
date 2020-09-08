@@ -1,7 +1,10 @@
 #!/bin/bash
 # vim: set ts=4 sw=4 sts=4 et :
 
-declare -ir false=0 true=1
+##declare -ir false=0 true=1
+
+export DIST="fc32"
+source config.sh
 
 ################################################################################
 # XXX:
@@ -16,17 +19,54 @@ DEBUG=false
 DRYRUN=false
 
 SOURCE_ROOT_IMG='/home/kvm/qubes/qubes-src/linux-template-builder/qubeized_images/fedora-32/root.img'
-##SOURCE_PRIVATE_IMG=/var/lib/qubes/vm-templates/fc32/private.img
+##SOURCE_PRIVATE_IMG=/var/lib/qubes/vm-templates/fedora-32/private.img
+SOURCE_PRIVATE_IMG=/var/lib/qubes/vm-templates/fc32/private.img.orig
 TEMPLATE_NAME='fedora-32'
 
-export SCRIPTSDIR="$(readlink -m template_kvm)"
+##export SCRIPTSDIR="$(readlink -m template_kvm)"
+##export RPMDIR="/qubes-kvm/qubes-packages-mirror-repo/vm-fc32/rpm"
 export TEMPLATE_ROOT_WITH_PARTITIONS=1
 
 #### XXX:  TEMP:
 if (( clean )); then
-    ./tmp_mount_cleanup "$TEMPLATE_NAME"
+    ./mount_cleanup "$TEMPLATE_NAME"
 fi
+
+export TEMPLATE_ROOT_SIZE=100G
+export TEMPLATE_PRIVATE_SIZE=100G
 ########
 
 sudo -E ./prepare_image "${TEMPLATE_NAME}" "$SOURCE_ROOT_IMG" "$SOURCE_PRIVATE_IMG"
+
+##
+## ISSUES:
+## BOOT: /boot/vmlinuz-5.7.14-200.fc32.x86_64' not found
+##
+
+CHROOT=false
+CHROOT=true
+
+#MOVE=false
+MOVE=true
+
+ROOT_IMAGE="${TEMPLATE_NAME}.img"
+PRIVATE_IMAGE="${TEMPLATE_NAME}-private.img"
+if (( CHROOT )); then
+
+    sudo -E ./mount_image mount "$ROOT_IMAGE" "$PRIVATE_IMAGE" || exit 1
+    echo "Entering chroot.  Type exit when done"
+    sudo -E chroot "mnt/root"
+    sudo -E ./mount_image umount "$ROOT_IMAGE" "$PRIVATE_IMAGE"
+
+fi
+if (( MOVE )); then
+
+    # Move test image in place
+    sudo mv "$ROOT_IMAGE" /var/lib/qubes/vm-templates/fc32/root.img
+    sudo mv "$PRIVATE_IMAGE" /var/lib/qubes/vm-templates/fc32/private.img
+
+    # Remove bios vars to test initial boot
+    sudo rm -f /var/lib/libvirt/qemu/nvram/fc32_VARS.fd
+
+fi
 

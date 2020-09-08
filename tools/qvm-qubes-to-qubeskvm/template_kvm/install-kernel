@@ -1,0 +1,128 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+source "${SCRIPTSDIR}/distribution-extra.sh"
+DATADIR="${ROOTDIR}/data"
+
+
+build_kernel_fedora () {
+    #### '----------------------------------------------------------------------
+    info ' Build Fedora kernel'
+    #### '----------------------------------------------------------------------
+
+    local dist="$1"
+    local srcdir="$2"
+    local kerneldir="${srcdir}/kernel"
+    local branch="${dist/c/}"  ## IE: f32
+
+    echo "     dist: $dist"
+    echo "   srcdir: $srcdir"
+    echo "kerneldir: $kerneldir"
+    echo "   branch: $branch"
+
+    chroot "${INSTALLDIR}" sh -c "cd $srcdir; rm -rf *.rpm kernel" || true
+
+    # --- BUILD DEPS ---------------------------------------------------------------
+    chroot "${INSTALLDIR}" dnf update -y
+    chroot "${INSTALLDIR}" dnf install -y fedpkg fedora-packager rpmdevtools ncurses-devel pesign grubby qt3-devel libXi-devel gcc-c++
+    chroot "${INSTALLDIR}" /usr/libexec/pesign/pesign-authorize
+
+    # --- CLONE FEDORA KERNEL REPO -------------------------------------------------
+    mkdir -p "${INSTALLDIR}/${srcdir}"
+    chroot "${INSTALLDIR}" sh -c "cd $srcdir; fedpkg clone -a kernel"
+
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir; git checkout origin/${branch}"
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir; git branch ${branch}"
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir; git checkout ${branch}"
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir; dnf builddep -y kernel.spec"
+
+    # --- CONFIGURE ----------------------------------------------------------------
+    # Add VIFO modules to 'kernel-local'
+    cat << EOF > "${INSTALLDIR}/${kerneldir}/kernel-local"
+CONFIG_VFIO=y
+CONFIG_VFIO_PCI=y
+CONFIG_VFIO_NOIOMMU=y
+CONFIG_VFIO_IOMMU_TYPE1=y
+EOF
+
+    # Uncomment '# define buildid .local' within 'kernel.spec'
+    sed -i -e "s/# define buildid .local/%define buildid .local/" \
+        "${INSTALLDIR}/${kerneldir}/kernel.spec"
+
+    # --- BUILD --------------------------------------------------------------------
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir; fedpkg --release ${branch} local"
+    chroot "${INSTALLDIR}" sh -c "cd $kerneldir/x86_64; cp *.rpm ${srcdir}"
+}
+
+
+build_kernel () {
+    local dist="$1"
+    local srcdir="$2"
+
+    # Fedora (IE: fc32)
+    if echo "$dist" | grep -Pqo '^fc\d+'; then
+        build_kernel_fedora "$dist" "$srcdir"
+        return $?
+    else
+        return 1
+    fi
+}
+
+
+install_kernel_packages () {
+    #### '------------------------------------------------------------------
+    info ' Install kernel'
+    #### '------------------------------------------------------------------
+    local dist="$1"
+    local pkgsdir="$2"
+
+    # Fedora (IE: fc32)
+    if echo "$dist" | grep -Pqo '^fc\d+'; then
+        chroot "${INSTALLDIR}" sh -c "cd /share; RPMDIR=${pkgsdir} ./install-kernel-packages.sh"
+    else
+        return 1
+    fi
+}
+
+
+install_kernel () {
+    local dist="$1"
+    local kernel_rootdir="${2:-"${DATADIR}/kernel-x86_64"}"
+    local chroot_pkgsdir="${3:-"/pkgs"}"
+    local retcode=1
+
+    local kernel_datadir="${kernel_rootdir}/${dist}"
+    mkdir -p "${kernel_datadir}"
+
+    # Set chroot 'resolv.conf' to host '/etc/resolv.conf' to enable network
+    resolv 'set'
+
+    mount --bind "${DATADIR}/share" "${INSTALLDIR}/share"
+    mount --bind "$kernel_datadir" "${INSTALLDIR}/${chroot_pkgsdir}"
+    echo "KERNEL-DATADIR: $kernel_datadir"
+    echo "CHROOT-PACKAGEDIR:"
+    ls -l "${INSTALLDIR}/${chroot_pkgsdir}"
+
+    # Only update '/rw/usrlocal' if it is empty
+    readarray -t kerneldir_contents < <(ls -1 "${kernel_datadir}")
+    if [ "${#kerneldir_contents[@]}" -gt 0 ]; then
+        install_kernel_packages "$dist" $chroot_pkgsdir && retcode=0
+    fi
+
+    if [ $retcode -ge 1 ]; then
+        build_kernel "$dist" $chroot_pkgsdir && retcode=0
+        if [ $retcode -eq 0 ]; then
+            install_kernel_packages "$dist" "$chroot_pkgsdir" || retcode=1
+        fi
+    fi
+
+    sync
+    umount "${INSTALLDIR}/share"
+    umount "${INSTALLDIR}/${chroot_pkgsdir}"
+
+    # Restore chroot '/etc/resolv.conf'
+    resolv 'unset'
+
+    return $retcode
+}
+

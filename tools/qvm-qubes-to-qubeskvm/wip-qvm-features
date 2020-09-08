@@ -1,0 +1,76 @@
+#!/bin/bash
+# vim: set ts=4 sw=4 sts=4 et :
+
+##declare -ir false=0 true=1
+
+# FEATURES
+#
+#   fedora-32:
+#       None set
+#
+#   fc32:
+#       supported-service.meminfo-writer      1
+#       supported-service.qubes-update-check  1
+#       supported-service.crond               1
+#       supported-service.modem-manager       1
+#       supported-service.network-manager     1
+#       supported-service.clocksync           1
+#       supported-service.cups                1
+#       supported-service.guivm-gui-agent     1
+#       os                                    Linux
+#       qrexec                                1
+#       gui                                   1
+#       qubes-firewall
+#       vmexec                                1
+#
+#       # TEMPLATE OTHER FEATURES NOT SET
+#       supported-service.qubes-update-proxy  1
+#       supported-service.updates-proxy-setup 1
+#       supported-service.network             1
+#       supported-service.firwall             1
+
+
+# qvm-features [--verbose] [--quiet] [--help] [--unset] VMNAME [FEATURE] [VALUE]
+feature () {
+    local name="$1"
+    local mode="$2"
+    local key="$3"
+    local value="${4:-1}"
+
+    case "$mode" in
+        enable)
+            # Set feature value to 1
+            echo qvm-features "$name" "$key" "$value"
+            qvm-features "$name" "$key" "$value"
+            ;;
+        disable)
+            # Set feature value to 0
+            echo qvm-features "$name" "$key" 0
+            qvm-features "$name" "$key" 0
+            ;;
+        delete)
+            # Remove key
+            echo qvm-features --unset "$name" "$key"
+            qvm-features --unset "$name" "$key"
+            ;;
+    esac
+}
+name='fc32'
+#mode='enable'
+#mode='disable'
+mode='delete'
+
+feature $name $mode 'supported-service.meminfo-writer'
+feature $name $mode 'supported-service.qubes-update-check'
+feature $name $mode 'supported-service.crond'
+feature $name $mode 'supported-service.modem-manager'
+feature $name $mode 'supported-service.network-manager'
+feature $name $mode 'supported-service.clocksync'
+feature $name $mode 'supported-service.cups'
+feature $name $mode 'supported-service.guivm-gui-agent'
+feature $name $mode 'os' Linux
+feature $name $mode 'qrexec'
+feature $name $mode 'gui'
+feature $name $mode 'qubes-firewall'
+feature $name $mode 'vmexec'
+

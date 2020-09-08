@@ -28,7 +28,12 @@ trap cleanup EXIT
 info " Cloning private partition"
 #### '----------------------------------------------------------------------
 target_private="${INSTALLDIR}/rw"
+target_private_home="${INSTALLDIR}/rw/home"
 source_private="${SOURCEDIR}/private"
+
+mkdir -p "${INSTALLDIR}/rw"
+mount --bind "${PRIVATEDIR}" "${INSTALLDIR}/rw"
+
 if [ -d "${source_private}" ]; then
     rsync -aP --delete "${source_private}/" "${target_private}" || true
 else
@@ -96,20 +101,14 @@ EOF
     ##    touch ${INSTALLDIR}/var/lib/qubes/first-boot-completed
     ##fi
 
+    # Change source_private location
     source_private="${SOURCEDIR}/root/home"
-    target_private="${INSTALLDIR}/rw/home"
-    mkdir -p "${target_private}"
-    rsync -aP --delete "${source_private}/" "${target_private}" || true
-    umount "${INSTALLDIR}/rw"
-
-    mkdir -p "${INSTALLDIR}/home/"
-    rm -rf "${INSTALLDIR}/home/"*
-    ##mount --bind "${target_private}" "${INSTALLDIR}/home"
-    ##mount --bind "${source_private}" "${INSTALLDIR}/home"
-
-    mount "${TARGET_PRIVATE_DEV}" "${PRIVATEDIR}" || exit 1
-    mount --bind "${PRIVATEDIR}/home" "${INSTALLDIR}/home"
+    mkdir -p "${target_private_home}"
+    rsync -aP --delete "${source_private}/" "${target_private_home}" || true
 fi
+sync
+#sleep 1
+umount "${INSTALLDIR}/rw"
 
 
 #### '----------------------------------------------------------------------
@@ -122,6 +121,15 @@ fi
 
 
 #### '----------------------------------------------------------------------
+info " Remount private partition"
+#### '----------------------------------------------------------------------
+mkdir -p "${INSTALLDIR}/home/"
+rm -rf "${INSTALLDIR}/home/"*
+mount --bind "${PRIVATEDIR}" "${INSTALLDIR}/rw"
+mount --bind "${INSTALLDIR}/rw/home" "${INSTALLDIR}/home"
+
+
+#### '----------------------------------------------------------------------
 info " Cloning boot partition"
 #### '----------------------------------------------------------------------
 target_boot="${INSTALLDIR}/boot"
@@ -131,43 +139,60 @@ if [ ! -d "${source_boot}" ]; then
 fi
 rsync -aP --delete "${source_boot}/" "${target_boot}" || true
 
-
-#### '----------------------------------------------------------------------
-info " Cloning EFI partition"
-#### '----------------------------------------------------------------------
-target_efi="${INSTALLDIR}/boot/efi"
-source_efi="${SOURCEDIR}/efi"
-if [ ! -d "${source_efi}" ]; then
-    source_efi="${ROOTDIR}/data/efi"
-fi
-rsync -aP --delete "${source_efi}/" "${target_efi}" || true
-##unmount "${target_efi}" || true
+######## MOVED TO 'install-qubes-kvm-updates.sh'
+###### '----------------------------------------------------------------------
+##info " Cloning EFI partition"
+###### '----------------------------------------------------------------------
+##target_efi="${INSTALLDIR}/boot/efi"
+##source_efi="${SOURCEDIR}/efi"
+##if [ ! -d "${source_efi}" ]; then
+##    source_efi="${ROOTDIR}/data/efi"
+##fi
+##rsync -aP --delete "${source_efi}/" "${target_efi}" || true
+####unmount "${target_efi}" || true
 
 
 #### '----------------------------------------------------------------------
 info " Cloning rw/usrlocal"
 #### '----------------------------------------------------------------------
-rsync -aP --delete "${INSTALLDIR}/usr/local/" "${PRIVATEDIR}/usrlocal" || true
+target_usrlocal="${PRIVATEDIR}/usrlocal"
+mkdir -p "${target_usrlocal}"
+readarray -t usrlocal_contents < <(ls -1 "${target_usrlocal}")
+
+# Only update '/rw/usrlocal' if it is empty
+if [ "${#usrlocal_contents[@]}" -eq 0 ]; then
+    rsync -aP --delete "${INSTALLDIR}/usr/local/" "${target_usrlocal}" || true
+    rm -rf "${INSTALLDIR}/usr/local/*" || true
+fi
+mount --bind "${INSTALLDIR}/rw/usrlocal" "${INSTALLDIR}/usr/local"
+
+
+######## MOVED TO 'install-qubes-kvm-updates.sh'
+#### '----------------------------------------------------------------------
+##info " Update config"
+#### '----------------------------------------------------------------------
+##mv "${INSTALLDIR}/etc/fstab" "${INSTALLDIR}/etc/fstab.orig"
+##cp "${ROOTDIR}/data/fstab" "${INSTALLDIR}/etc/fstab"
+##chown root:root "${INSTALLDIR}/etc/fstab"
+##chmod 644 "${INSTALLDIR}/etc/fstab"
+
+
+######## MOVED TO 'install-qubes-kvm-updates.sh'
+#### '----------------------------------------------------------------------
+##info " Update grub"
+#### '----------------------------------------------------------------------
+##mount -t proc proc "${INSTALLDIR}/proc"
+##chroot "${INSTALLDIR}" mount -t sysfs sys /sys
+##chroot "${INSTALLDIR}" mount -t devtmpfs none /dev
+##chroot "${INSTALLDIR}" grub2-mkconfig -o /etc/grub2.cfg || RETCODE=1
+##chroot "${INSTALLDIR}" grub2-mkconfig -o /etc/grub2-efi.cfg || RETCODE=1
+##chroot "${INSTALLDIR}" umount /dev /sys /proc
 
 
 #### '----------------------------------------------------------------------
-info " Update config"
+info " Update config and grub"
 #### '----------------------------------------------------------------------
-mv "${INSTALLDIR}/etc/fstab" "${INSTALLDIR}/etc/fstab.orig"
-cp "${ROOTDIR}/data/fstab" "${INSTALLDIR}/etc/fstab"
-chown root:root "${INSTALLDIR}/etc/fstab"
-chmod 644 "${INSTALLDIR}/etc/fstab"
-
-
-#### '----------------------------------------------------------------------
-info " Update grub"
-#### '----------------------------------------------------------------------
-mount -t proc proc "${INSTALLDIR}/proc"
-chroot "${INSTALLDIR}" mount -t sysfs sys /sys
-chroot "${INSTALLDIR}" mount -t devtmpfs none /dev
-chroot "${INSTALLDIR}" grub2-mkconfig -o /etc/grub2.cfg || RETCODE=1
-chroot "${INSTALLDIR}" grub2-mkconfig -o /etc/grub2-efi.cfg || RETCODE=1
-chroot "${INSTALLDIR}" umount /dev /sys /proc
+"${SCRIPTSDIR}"/install-qubes-kvm-updates.sh
 
 
 #### '----------------------------------------------------------------------
