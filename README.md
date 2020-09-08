@@ -82,7 +82,7 @@ If the RPM installation script fails, be sure all host installation and configur
 
 ##### Manually extract `root.img` image
 
-If the `root.img` failed to extract, manually extract it `cat root.img.* > root.img` then check permissions.  
+If the `root.img` failed to extract, manually extract it `cat root.img.* > root.img` then check permissions.
 
 `-rw------- 1 root qubes 10737418240 Aug 21 18:08  root.img`
 
@@ -103,13 +103,13 @@ If running the post installation script also fails, backup, then update the '/va
         <property name="installed_by_rpm">True</property>
         <property name="label">black</property>
         <property name="maxmem">0</property>
-        
+
         <!-- 4G RAM -->
         <property name="memory">4000</property>
         <property name="name">fedora-32</property>
         <property name="qid">1</property>
-        
-        <!-- Create own "uuid" from shell using 'uuidgen' command -->        
+
+        <!-- Create own "uuid" from shell using 'uuidgen' command -->
         <property name="uuid">13921bd7-35aa-4c77-b7ac-eaa5eef27afd</property>
 
         <property name="virt_mode">hvm</property>
@@ -192,7 +192,7 @@ Before starting up the virtual machine template, you will need to copy both the 
 ```bash
 #!/bin/bash
 
-# --- SYNC ORIGINAL IMAGES WITH CURRENT DIRTY IMAGES --------------------------- 
+# --- SYNC ORIGINAL IMAGES WITH CURRENT DIRTY IMAGES ---------------------------
 if [ -e "root-dirty.img" ]; then
     sudo cp -pf --reflink root-dirty.img root.img
 fi
@@ -200,17 +200,17 @@ if [ -e "private-dirty.img" ]; then
     sudo cp -pf --reflink private-dirty.img private.img
 fi
 
-# --- REMOVE VOLATILE-DIRTY IMAGE ---------------------------------------------- 
+# --- REMOVE VOLATILE-DIRTY IMAGE ----------------------------------------------
 sudo rm -f volatile-dirty.img
 
-# --- UPDATE DIRTY IMAGES FROM ORIGINAL IMAGES --------------------------------- 
+# --- UPDATE DIRTY IMAGES FROM ORIGINAL IMAGES ---------------------------------
 sudo cp -pf --reflink root.img root-dirty.img
 sudo cp -pf --reflink private.img private-dirty.img
 sudo truncate -s 10G volatile-dirty.img
 sudo chown root:qubes volatile-dirty.img
 sudo chmod 0600 volatile-dirty.img
 
-# --- REMOVE ANY BACKUPS ------------------------------------------------------- 
+# --- REMOVE ANY BACKUPS -------------------------------------------------------
 sudo rm -f root.img.[0-9]*
 ```
 
@@ -399,7 +399,7 @@ kernel-local:
 kernel.spec:
   #### ORIGINAL
   # define buildid .local
-  
+
   #### UNCOMMENTED
   %define buildid .local
 
@@ -489,7 +489,7 @@ $ find /var/lib/qubes -type f | xargs sudo chmod 0660
 
 
 
-#### /var/lib/qubes/vm-kernels/* 
+#### /var/lib/qubes/vm-kernels/*
 
 Make sure qubes kernel package is installed.  Example:
 
